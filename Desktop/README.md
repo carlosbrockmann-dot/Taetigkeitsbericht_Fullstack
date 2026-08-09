@@ -53,7 +53,7 @@ Details: [../Planung.md](../Planung.md), [../README.md](../README.md).
 
 Geplant (noch nicht implementiert): Aus der Desktop-App sollen die Tätigkeiten / Zeiteinträge als **PDF** exportiert werden können, geeignet zum **Ausdrucken** (z. B. Monatsübersicht mit geleisteten Zeiten, optional dieselben Spalten wie beim Excel-Export bzw. über Config steuerbar).
 
-**Reihenfolge:** Diese Funktion steht **ganz zum Schluss** – erst nach Server-Upload, Frontend-Übersicht und AWS-Integration. Aufgabenliste: [../ToDo2.csv](../ToDo2.csv).
+**Reihenfolge:** Diese Funktion steht **ganz zum Schluss** – erst nach Server-Upload, Frontend-Übersicht und AWS-Integration. Aufgabenliste: [../ToDo.csv](../ToDo.csv) (Phase 5).
 
 ## Anbindung zur Datenbank
 

@@ -1,8 +1,0 @@
-Vorgangstyp,Zusammenfassung,Beschreibung,Priorität,Stichwörter,Stichwörter,Vorgangs-ID,Übergeordnet
-Epic,"Phase 5 – Desktop PDF-Export (Abschluss)","Als letzte Phase nach Upload Frontend und AWS: Tätigkeiten aus der Desktop-App als PDF zum Ausdrucken exportieren. Siehe Desktop/README.md.",Niedrig,desktop,pdf,700,
-Aufgabe,"5.1 Anforderungen PDF-Drucklayout festlegen","Inhalt und Layout der druckbaren Übersicht (Zeitraum z. B. Monat Spalten Kopf-/Fußzeile Summen Mitarbeiter/Mandant). Abgleich mit Excel-Export und config.toml.",Niedrig,desktop,pdf,701,700
-Aufgabe,"5.2 Application-Use-Case PDF-Export","Use Case in der Application-Schicht: Zeiteinträge für Zeitraum laden und an einen PDF-Exporter übergeben (Clean Architecture Interface).",Niedrig,desktop,pdf,702,700
-Aufgabe,"5.3 PDF-Bibliothek wählen und anbinden","Geeignete Python-PDF-Bibliothek wählen (z. B. reportlab weasyprint fpdf2) Abhängigkeit in requirements.txt dokumentieren.",Niedrig,desktop,pdf,703,700
-Aufgabe,"5.4 PDF-Exporter implementieren","Infrastructure/Presentation: PDF erzeugen druckfreundlich (A4 Hochformat klare Tabelle lesbare Schrift). Spalten ggf. konfigurierbar.",Niedrig,desktop,pdf,704,700
-Aufgabe,"5.5 Desktop-UI Export nach PDF","Menü/Schaltfläche Speichern-unter Dialog Zeitraumwahl Feedback bei Erfolg/Fehler.",Niedrig,desktop,ui,705,700
-Aufgabe,"5.6 Tests und README für PDF-Export","Unit-/Smoke-Tests für Exporter; Desktop/README.md um Bedienung und Config ergänzen.",Niedrig,desktop,test,706,700
