@@ -49,6 +49,12 @@ Geplant (noch nicht implementiert): Login gegen das Backend, danach Upload der Z
 
 Details: [../Planung.md](../Planung.md), [../README.md](../README.md).
 
+## Geplanter PDF-Export zum Ausdrucken
+
+Geplant (noch nicht implementiert): Aus der Desktop-App sollen die Tätigkeiten / Zeiteinträge als **PDF** exportiert werden können, geeignet zum **Ausdrucken** (z. B. Monatsübersicht mit geleisteten Zeiten, optional dieselben Spalten wie beim Excel-Export bzw. über Config steuerbar).
+
+**Reihenfolge:** Diese Funktion steht **ganz zum Schluss** – erst nach Server-Upload, Frontend-Übersicht und AWS-Integration. Aufgabenliste: [../ToDo2.csv](../ToDo2.csv).
+
 ## Anbindung zur Datenbank
 
 Die Persistenz erfolgt über SQLite. Die Anbindung geschieht über ein ORM (SQLModel auf Basis von SQLAlchemy); per Dependency Injection und Repository-Pattern bleiben die Aufrufer von der konkreten Speicherung entkoppelt. 
