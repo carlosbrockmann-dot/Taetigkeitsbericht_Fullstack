@@ -1,68 +1,68 @@
-Issue Type,Summary,Description,Priority,Labels,Labels,Issue ID,Parent
-Epic,"Phase 0 – Grundlagen und Abstimmungen","Kontrakte für Daten Upload Auth GraphQL DB VPC und Zertifikate festlegen. Siehe Planung.md.",High,planung,phase-0,100,
-Epic,"Phase 1 – Backend","Eigenständige GraphQL-API Clean Architecture SOLID ORM Auth PostgreSQL / Aurora DSQL TLS. Siehe Planung.md und Backend/README.md.",High,backend,phase-1,200,
-Epic,"Phase 2 – Desktop-Erweiterung","Login Upload JSON-Liste Token und private Zertifikatsdateien. Siehe Planung.md und Desktop/README.md.",High,desktop,phase-2,300,
-Epic,"Phase 3 – Frontend","React-App Login und Übersicht geleisteter Stunden. Siehe Planung.md und Frontend/README.md.",High,frontend,phase-3,400,
-Epic,"Phase 4 – Integration AWS-VPC und Betrieb","E2E VPC Firewall öffentliche Freigaben Desktop-Zertifikate Aurora DSQL. Siehe Planung.md.",High,aws,phase-4,500,
-Epic,"Offene Punkte – vor Implementierung klären","Klärungsbedarf aus Planung.md (Upload-Semantik Rollen Mandant Stack Zertifikate).",Medium,planung,klaerung,600,
-Task,"0.1 Datenkontrakt Upload-Liste festlegen","JSON-Schema einer Upload-Liste: Felder analog Zeiteintrag + mitarbeiter_id Datums-/Zeitformate Mandantenbezug falls nötig.",Highest,planung,backend,101,100
-Task,"0.2 Auth-Kontrakt festlegen","Login-Mutation bzw. Endpoint Token-Typ (z. B. JWT) Header-Name (Authorization Bearer) Ablaufzeit.",Highest,planung,backend,102,100
-Task,"0.3 GraphQL-Oberfläche skizzieren","Login Upload der Zeiteinträge Abfragen für Übersicht (Filter Mitarbeiter Zeitraum).",High,planung,backend,103,100
-Task,"0.4 DB-Zielbilder klären PostgreSQL vs Aurora DSQL","Treiber Connection-String Einschränkungen DSQL dokumentieren.",High,planung,backend,104,100
-Task,"0.5 Verzeichnisstruktur Backend/Frontend anlegen","Nur Gerüst anlegen; bestehende Desktop-Struktur nicht unnötig umbauen.",Medium,planung,backend,105,100
-Task,"0.6 AWS-VPC-Konzept skizzieren","Subnets öffentlich/privat Security Groups Ports von außen (Frontend Backend-API) vs. nur intern (DB).",High,aws,planung,106,100
-Task,"0.7 Desktop-Zertifikatsmodell festlegen","Private Zertifikatsdateien (Client-Zertifikat Schlüssel CA) Speicherort/Config Ausstellung und Rotation.",High,desktop,aws,107,100
-Task,"1.1.1 Backend-Schichten anlegen","Domain Application Infrastructure (Persistence Auth) Presentation (GraphQL).",High,backend,architecture,201,200
-Task,"1.1.2 Dependency Rule und DI umsetzen","Äußere Schichten hängen von inneren ab; Repositories hinter Interfaces.",High,backend,architecture,202,200
-Task,"1.1.3 Backend-Konfiguration Umgebungen","DB-URL Token-Secret CORS Trennung lokal/AWS TLS-/Zertifikatspfad für Desktop-Clients.",High,backend,config,203,200
-Task,"1.1.4 Backend Abhängigkeiten und lokaler Start","requirements.txt Dev-Abhängigkeiten README lokaler Start (z. B. Uvicorn).",Medium,backend,setup,204,200
-Task,"1.1.5 TLS am API-Endpunkt mTLS","Server-Zertifikat; Client-Zertifikatsprüfung für Desktop-Upload (mTLS).",High,backend,security,205,200
-Task,"1.2.1 Entität Mitarbeiter","Mindestens ID Benutzername Passwort-Hash; weitere Felder nach Bedarf.",High,backend,domain,206,200
-Task,"1.2.2 Entität Zeiteintrag Server mit Mitarbeiter-ID","Felder wie Desktop-Zeiteintrag/ArbeitszeitBasis plus mitarbeiter_id (Pflicht FK).",Highest,backend,domain,207,200
-Task,"1.2.3 ORM-Modelle und Migrationen","Einfache Tabelle(n); Index auf mitarbeiter_id ggf. (mitarbeiter_id datum).",High,backend,persistence,208,200
-Task,"1.2.4 Repository-Interfaces und Implementierungen","Clean Architecture Repositories.",High,backend,architecture,209,200
-Task,"1.2.5 Lokale PostgreSQL-Anbindung","Anbindung; Docker optional dokumentieren.",High,backend,persistence,210,200
-Task,"1.2.6 AWS Aurora DSQL Anbindung","Connection/Adapter Konfigurationsprofil; Abweichungen zu klassischem PostgreSQL dokumentieren und abfangen.",High,backend,aws,211,200
-Task,"1.3.1 Passwort-Hashing","Argon2/bcrypt; kein Klartext in der DB.",High,backend,security,212,200
-Task,"1.3.2 Login-Anwendungsfall","Benutzername + Passwort prüfen → Token ausstellen.",Highest,backend,security,213,200
-Task,"1.3.3 Token-Validierung für GraphQL","Kontext/Middleware; bei ungültigem/fehlendem Token ablehnen.",Highest,backend,security,214,200
-Task,"1.3.4 Seed/Admin-Weg für Testbenutzer","Nur Entwicklung.",Low,backend,setup,215,200
-Task,"1.4.1 GraphQL-Framework einbinden","z. B. Strawberry oder Ariadne passend zum Stack.",High,backend,graphql,216,200
-Task,"1.4.2 Mutation Login","Token (+ ggf. Mitarbeiter-Infos) zurückgeben.",Highest,backend,graphql,217,200
-Task,"1.4.3 Mutation Upload Tätigkeitsbericht","Liste von Einträgen im JSON-Format; Auth über Token im Header; mitarbeiter_id aus Token ableiten oder prüfen.",Highest,backend,graphql,218,200
-Task,"1.4.4 Validierung der Upload-Liste","Pflichtfelder Zeitfenster/Pausen analog Desktop-Regeln wo sinnvoll.",High,backend,domain,219,200
-Task,"1.4.5 Queries Übersicht geleistete Stunden","Je Zeitraum/Mitarbeiter (Aggregation oder Rohdaten für Frontend).",High,backend,graphql,220,200
-Task,"1.4.6 Fehler- und Idempotenz-Strategie Upload","Duplikate erneuter Upload desselben Monats festlegen und umsetzen.",Medium,backend,graphql,221,200
-Task,"1.5.1 Backend-Tests","Unit-Tests Domain/Application; Integrationstests Repository + GraphQL (Test-DB).",Medium,backend,test,222,200
-Task,"1.5.2 SOLID prüfen","SRP in Use Cases DIP über Interfaces keine Framework-Leaks in die Domain.",Medium,backend,architecture,223,200
-Task,"2.1 Desktop Login-UI","Benutzername/Passwort vor Upload; Token nur lokal/sessionbezogen speichern (nicht Klartext-Log).",Highest,desktop,auth,301,300
-Task,"2.2 Desktop Backend-Client Login und Upload","Login-Aufruf danach geschützte Upload-Mutation mit Token im Header.",Highest,desktop,upload,302,300
-Task,"2.3 Mapping Zeiteintrag zu JSON-Liste","Lokale Daten → JSON gemäß Kontrakt 0.1; Zeitraum-Auswahl (z. B. Monat).",High,desktop,upload,303,300
-Task,"2.4 Desktop Konfiguration URL und Zertifikate","Backend-URL und private Zertifikatsdateien in config.toml / external_api.toml (Client-Zertifikat Schlüssel CA).",High,desktop,security,304,300
-Task,"2.5 HTTPS-Client mit privaten Zertifikaten","TLS zum Backend nach Login mit konfigurierten privaten Zertifikatsdateien.",Highest,desktop,security,305,300
-Task,"2.6 Desktop UI-Feedback Upload","Erfolg Validierungs-/Auth-/Zertifikatsfehler anzeigen.",Medium,desktop,ui,306,300
-Task,"2.7 Desktop-Tests Mapping und Client","Fake/HTTP-Mock inkl. Zertifikatspfad-Konfiguration.",Medium,desktop,test,307,300
-Task,"2.8 Desktop-README Upload Login Zertifikate","Dokumentation ergänzen.",Low,desktop,docs,308,300
-Task,"3.1 Frontend-Projekt anlegen","Vite + React + TypeScript empfohlen; README Frontend/README.md.",High,frontend,setup,401,400
-Task,"3.2 GraphQL-Client einbinden","z. B. Apollo oder urql; Basis-URL konfigurierbar.",High,frontend,graphql,402,400
-Task,"3.3 Frontend Login-Seite","Benutzername/Passwort → Token speichern (Speicher + Header-Interceptor).",Highest,frontend,auth,403,400
-Task,"3.4 Geschützte Routen","Ohne Token zur Login-Seite.",High,frontend,auth,404,400
-Task,"3.5 Übersicht geleisteter Stunden","Tabelle/Liste Filter Zeitraum Anzeige je Tag/Eintrag Summen.",Highest,frontend,ui,405,400
-Task,"3.6 Logout und Token-Ablauf","Behandlung abgelaufener Tokens.",Medium,frontend,auth,406,400
-Task,"3.7 Basis-Styling und responsive Darstellung","An Produkt anbinden ohne überladenes Dashboard.",Medium,frontend,ui,407,400
-Task,"3.8 Frontend Smoke-/Komponententests","Nach Bedarf.",Low,frontend,test,408,400
-Task,"4.1 End-to-End lokal","Desktop-Login → Upload JSON-Liste → PostgreSQL → Anzeige im React-Frontend.",Highest,integration,e2e,501,500
-Task,"4.2 CORS und Auth-Header abstimmen","Über Desktop Backend Frontend abstimmen.",High,integration,security,502,500
-Task,"4.3 VPC anlegen/konfigurieren","Öffentliche und private Subnets; Backend und Frontend in der VPC betreiben.",Highest,aws,vpc,503,500
-Task,"4.4 Firewall Security Groups für DB","Aurora DSQL nur vom Backend (App-Subnet) erreichbar; kein öffentlicher DB-Zugriff.",Highest,aws,security,504,500
-Task,"4.5 Öffentliche Freigaben Frontend und Backend-API","HTTPS Frontend und HTTPS/GraphQL Backend von außen; nur nötige Ports/Quellen.",Highest,aws,networking,505,500
-Task,"4.6 Desktop-Zugang Zertifikate dokumentieren","API von außen; TLS mit privaten Zertifikatsdateien + Login-Token; Ausstellung dokumentieren.",High,aws,desktop,506,500
-Task,"4.7 Betriebskonzept Aurora DSQL","Secrets Manager Netzwerk Deployment-Skizze Infra-as-Code wo sinnvoll.",High,aws,ops,507,500
-Task,"4.8 READMEs an Ist-Stand anpassen","Root- und Komponenten-READMEs finalisieren.",Low,docs,planung,508,500
-Task,"Klären: Upload-Semantik","Nur Einfügen Upsert oder Monats-Ersatz?",Medium,klaerung,backend,601,600
-Task,"Klären: Rollen und Datensicht","Darf ein Mitarbeiter nur eigene Daten sehen oder gibt es Rollen (Admin/Auswertung)?",Medium,klaerung,backend,602,600
-Task,"Klären: mandant_id auf dem Server","Soll mandant_id aus dem Desktop mit auf den Server?",Medium,klaerung,backend,603,600
-Task,"Klären: GraphQL-Bibliothek und ORM","Vorschlag SQLModel/SQLAlchemy + Strawberry konsistent zum Desktop.",Medium,klaerung,backend,604,600
-Task,"Klären: Aurora-DSQL ORM-Kompatibilität","Migrationen Transaktionen prüfen.",Medium,klaerung,aws,605,600
-Task,"Klären: mTLS nur Desktop oder auch Browser","Browser typisch ohne Client-Zertifikat; Desktop mit privaten Zertifikatsdateien.",Medium,klaerung,security,606,600
-Task,"Klären: Zertifikatsausstellung","Interne CA ACM Private CA oder manuell?",Medium,klaerung,aws,607,600
+Vorgangstyp,Zusammenfassung,Beschreibung,Priorität,Stichwörter,Stichwörter,Vorgangs-ID,Übergeordnet
+Epic,"Phase 0 – Grundlagen und Abstimmungen","Kontrakte für Daten Upload Auth GraphQL DB VPC und Zertifikate festlegen. Siehe Planung.md.",Hoch,planung,phase-0,100,
+Epic,"Phase 1 – Backend","Eigenständige GraphQL-API Clean Architecture SOLID ORM Auth PostgreSQL / Aurora DSQL TLS. Siehe Planung.md und Backend/README.md.",Hoch,backend,phase-1,200,
+Epic,"Phase 2 – Desktop-Erweiterung","Login Upload JSON-Liste Token und private Zertifikatsdateien. Siehe Planung.md und Desktop/README.md.",Hoch,desktop,phase-2,300,
+Epic,"Phase 3 – Frontend","React-App Login und Übersicht geleisteter Stunden. Siehe Planung.md und Frontend/README.md.",Hoch,frontend,phase-3,400,
+Epic,"Phase 4 – Integration AWS-VPC und Betrieb","E2E VPC Firewall öffentliche Freigaben Desktop-Zertifikate Aurora DSQL. Siehe Planung.md.",Hoch,aws,phase-4,500,
+Epic,"Offene Punkte – vor Implementierung klären","Klärungsbedarf aus Planung.md (Upload-Semantik Rollen Mandant Stack Zertifikate).",Mittel,planung,klaerung,600,
+Aufgabe,"0.1 Datenkontrakt Upload-Liste festlegen","JSON-Schema einer Upload-Liste: Felder analog Zeiteintrag + mitarbeiter_id Datums-/Zeitformate Mandantenbezug falls nötig.",Höchste,planung,backend,101,100
+Aufgabe,"0.2 Auth-Kontrakt festlegen","Login-Mutation bzw. Endpoint Token-Typ (z. B. JWT) Header-Name (Authorization Bearer) Ablaufzeit.",Höchste,planung,backend,102,100
+Aufgabe,"0.3 GraphQL-Oberfläche skizzieren","Login Upload der Zeiteinträge Abfragen für Übersicht (Filter Mitarbeiter Zeitraum).",Hoch,planung,backend,103,100
+Aufgabe,"0.4 DB-Zielbilder klären PostgreSQL vs Aurora DSQL","Treiber Connection-String Einschränkungen DSQL dokumentieren.",Hoch,planung,backend,104,100
+Aufgabe,"0.5 Verzeichnisstruktur Backend/Frontend anlegen","Nur Gerüst anlegen; bestehende Desktop-Struktur nicht unnötig umbauen.",Mittel,planung,backend,105,100
+Aufgabe,"0.6 AWS-VPC-Konzept skizzieren","Subnets öffentlich/privat Security Groups Ports von außen (Frontend Backend-API) vs. nur intern (DB).",Hoch,aws,planung,106,100
+Aufgabe,"0.7 Desktop-Zertifikatsmodell festlegen","Private Zertifikatsdateien (Client-Zertifikat Schlüssel CA) Speicherort/Config Ausstellung und Rotation.",Hoch,desktop,aws,107,100
+Aufgabe,"1.1.1 Backend-Schichten anlegen","Domain Application Infrastructure (Persistence Auth) Presentation (GraphQL).",Hoch,backend,architecture,201,200
+Aufgabe,"1.1.2 Dependency Rule und DI umsetzen","Äußere Schichten hängen von inneren ab; Repositories hinter Interfaces.",Hoch,backend,architecture,202,200
+Aufgabe,"1.1.3 Backend-Konfiguration Umgebungen","DB-URL Token-Secret CORS Trennung lokal/AWS TLS-/Zertifikatspfad für Desktop-Clients.",Hoch,backend,config,203,200
+Aufgabe,"1.1.4 Backend Abhängigkeiten und lokaler Start","requirements.txt Dev-Abhängigkeiten README lokaler Start (z. B. Uvicorn).",Mittel,backend,setup,204,200
+Aufgabe,"1.1.5 TLS am API-Endpunkt mTLS","Server-Zertifikat; Client-Zertifikatsprüfung für Desktop-Upload (mTLS).",Hoch,backend,security,205,200
+Aufgabe,"1.2.1 Entität Mitarbeiter","Mindestens ID Benutzername Passwort-Hash; weitere Felder nach Bedarf.",Hoch,backend,domain,206,200
+Aufgabe,"1.2.2 Entität Zeiteintrag Server mit Mitarbeiter-ID","Felder wie Desktop-Zeiteintrag/ArbeitszeitBasis plus mitarbeiter_id (Pflicht FK).",Höchste,backend,domain,207,200
+Aufgabe,"1.2.3 ORM-Modelle und Migrationen","Einfache Tabelle(n); Index auf mitarbeiter_id ggf. (mitarbeiter_id datum).",Hoch,backend,persistence,208,200
+Aufgabe,"1.2.4 Repository-Interfaces und Implementierungen","Clean Architecture Repositories.",Hoch,backend,architecture,209,200
+Aufgabe,"1.2.5 Lokale PostgreSQL-Anbindung","Anbindung; Docker optional dokumentieren.",Hoch,backend,persistence,210,200
+Aufgabe,"1.2.6 AWS Aurora DSQL Anbindung","Connection/Adapter Konfigurationsprofil; Abweichungen zu klassischem PostgreSQL dokumentieren und abfangen.",Hoch,backend,aws,211,200
+Aufgabe,"1.3.1 Passwort-Hashing","Argon2/bcrypt; kein Klartext in der DB.",Hoch,backend,security,212,200
+Aufgabe,"1.3.2 Login-Anwendungsfall","Benutzername + Passwort prüfen → Token ausstellen.",Höchste,backend,security,213,200
+Aufgabe,"1.3.3 Token-Validierung für GraphQL","Kontext/Middleware; bei ungültigem/fehlendem Token ablehnen.",Höchste,backend,security,214,200
+Aufgabe,"1.3.4 Seed/Admin-Weg für Testbenutzer","Nur Entwicklung.",Niedrig,backend,setup,215,200
+Aufgabe,"1.4.1 GraphQL-Framework einbinden","z. B. Strawberry oder Ariadne passend zum Stack.",Hoch,backend,graphql,216,200
+Aufgabe,"1.4.2 Mutation Login","Token (+ ggf. Mitarbeiter-Infos) zurückgeben.",Höchste,backend,graphql,217,200
+Aufgabe,"1.4.3 Mutation Upload Tätigkeitsbericht","Liste von Einträgen im JSON-Format; Auth über Token im Header; mitarbeiter_id aus Token ableiten oder prüfen.",Höchste,backend,graphql,218,200
+Aufgabe,"1.4.4 Validierung der Upload-Liste","Pflichtfelder Zeitfenster/Pausen analog Desktop-Regeln wo sinnvoll.",Hoch,backend,domain,219,200
+Aufgabe,"1.4.5 Queries Übersicht geleistete Stunden","Je Zeitraum/Mitarbeiter (Aggregation oder Rohdaten für Frontend).",Hoch,backend,graphql,220,200
+Aufgabe,"1.4.6 Fehler- und Idempotenz-Strategie Upload","Duplikate erneuter Upload desselben Monats festlegen und umsetzen.",Mittel,backend,graphql,221,200
+Aufgabe,"1.5.1 Backend-Tests","Unit-Tests Domain/Application; Integrationstests Repository + GraphQL (Test-DB).",Mittel,backend,test,222,200
+Aufgabe,"1.5.2 SOLID prüfen","SRP in Use Cases DIP über Interfaces keine Framework-Leaks in die Domain.",Mittel,backend,architecture,223,200
+Aufgabe,"2.1 Desktop Login-UI","Benutzername/Passwort vor Upload; Token nur lokal/sessionbezogen speichern (nicht Klartext-Log).",Höchste,desktop,auth,301,300
+Aufgabe,"2.2 Desktop Backend-Client Login und Upload","Login-Aufruf danach geschützte Upload-Mutation mit Token im Header.",Höchste,desktop,upload,302,300
+Aufgabe,"2.3 Mapping Zeiteintrag zu JSON-Liste","Lokale Daten → JSON gemäß Kontrakt 0.1; Zeitraum-Auswahl (z. B. Monat).",Hoch,desktop,upload,303,300
+Aufgabe,"2.4 Desktop Konfiguration URL und Zertifikate","Backend-URL und private Zertifikatsdateien in config.toml / external_api.toml (Client-Zertifikat Schlüssel CA).",Hoch,desktop,security,304,300
+Aufgabe,"2.5 HTTPS-Client mit privaten Zertifikaten","TLS zum Backend nach Login mit konfigurierten privaten Zertifikatsdateien.",Höchste,desktop,security,305,300
+Aufgabe,"2.6 Desktop UI-Feedback Upload","Erfolg Validierungs-/Auth-/Zertifikatsfehler anzeigen.",Mittel,desktop,ui,306,300
+Aufgabe,"2.7 Desktop-Tests Mapping und Client","Fake/HTTP-Mock inkl. Zertifikatspfad-Konfiguration.",Mittel,desktop,test,307,300
+Aufgabe,"2.8 Desktop-README Upload Login Zertifikate","Dokumentation ergänzen.",Niedrig,desktop,docs,308,300
+Aufgabe,"3.1 Frontend-Projekt anlegen","Vite + React + TypeScript empfohlen; README Frontend/README.md.",Hoch,frontend,setup,401,400
+Aufgabe,"3.2 GraphQL-Client einbinden","z. B. Apollo oder urql; Basis-URL konfigurierbar.",Hoch,frontend,graphql,402,400
+Aufgabe,"3.3 Frontend Login-Seite","Benutzername/Passwort → Token speichern (Speicher + Header-Interceptor).",Höchste,frontend,auth,403,400
+Aufgabe,"3.4 Geschützte Routen","Ohne Token zur Login-Seite.",Hoch,frontend,auth,404,400
+Aufgabe,"3.5 Übersicht geleisteter Stunden","Tabelle/Liste Filter Zeitraum Anzeige je Tag/Eintrag Summen.",Höchste,frontend,ui,405,400
+Aufgabe,"3.6 Logout und Token-Ablauf","Behandlung abgelaufener Tokens.",Mittel,frontend,auth,406,400
+Aufgabe,"3.7 Basis-Styling und responsive Darstellung","An Produkt anbinden ohne überladenes Dashboard.",Mittel,frontend,ui,407,400
+Aufgabe,"3.8 Frontend Smoke-/Komponententests","Nach Bedarf.",Niedrig,frontend,test,408,400
+Aufgabe,"4.1 End-to-End lokal","Desktop-Login → Upload JSON-Liste → PostgreSQL → Anzeige im React-Frontend.",Höchste,integration,e2e,501,500
+Aufgabe,"4.2 CORS und Auth-Header abstimmen","Über Desktop Backend Frontend abstimmen.",Hoch,integration,security,502,500
+Aufgabe,"4.3 VPC anlegen/konfigurieren","Öffentliche und private Subnets; Backend und Frontend in der VPC betreiben.",Höchste,aws,vpc,503,500
+Aufgabe,"4.4 Firewall Security Groups für DB","Aurora DSQL nur vom Backend (App-Subnet) erreichbar; kein öffentlicher DB-Zugriff.",Höchste,aws,security,504,500
+Aufgabe,"4.5 Öffentliche Freigaben Frontend und Backend-API","HTTPS Frontend und HTTPS/GraphQL Backend von außen; nur nötige Ports/Quellen.",Höchste,aws,networking,505,500
+Aufgabe,"4.6 Desktop-Zugang Zertifikate dokumentieren","API von außen; TLS mit privaten Zertifikatsdateien + Login-Token; Ausstellung dokumentieren.",Hoch,aws,desktop,506,500
+Aufgabe,"4.7 Betriebskonzept Aurora DSQL","Secrets Manager Netzwerk Deployment-Skizze Infra-as-Code wo sinnvoll.",Hoch,aws,ops,507,500
+Aufgabe,"4.8 READMEs an Ist-Stand anpassen","Root- und Komponenten-READMEs finalisieren.",Niedrig,docs,planung,508,500
+Aufgabe,"Klären: Upload-Semantik","Nur Einfügen Upsert oder Monats-Ersatz?",Mittel,klaerung,backend,601,600
+Aufgabe,"Klären: Rollen und Datensicht","Darf ein Mitarbeiter nur eigene Daten sehen oder gibt es Rollen (Admin/Auswertung)?",Mittel,klaerung,backend,602,600
+Aufgabe,"Klären: mandant_id auf dem Server","Soll mandant_id aus dem Desktop mit auf den Server?",Mittel,klaerung,backend,603,600
+Aufgabe,"Klären: GraphQL-Bibliothek und ORM","Vorschlag SQLModel/SQLAlchemy + Strawberry konsistent zum Desktop.",Mittel,klaerung,backend,604,600
+Aufgabe,"Klären: Aurora-DSQL ORM-Kompatibilität","Migrationen Transaktionen prüfen.",Mittel,klaerung,aws,605,600
+Aufgabe,"Klären: mTLS nur Desktop oder auch Browser","Browser typisch ohne Client-Zertifikat; Desktop mit privaten Zertifikatsdateien.",Mittel,klaerung,security,606,600
+Aufgabe,"Klären: Zertifikatsausstellung","Interne CA ACM Private CA oder manuell?",Mittel,klaerung,aws,607,600
