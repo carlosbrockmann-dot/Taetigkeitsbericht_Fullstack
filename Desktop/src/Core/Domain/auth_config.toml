@@ -1,0 +1,7 @@
+[auth.default_user]
+user_id = 1
+username = "default.user"
+email = "default.user@example.local"
+password_hash = "local-placeholder-hash-value-12345"
+password = "ChangeMe123!"
+is_active = true
