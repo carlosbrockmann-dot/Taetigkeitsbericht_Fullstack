@@ -10,9 +10,9 @@ Monorepo für lokale Zeiterfassung, Server-Upload und Web-Übersicht.
 
 | Ordner | Beschreibung |
 |--------|----------------|
-| **[Desktop/](./Desktop/)** | Vorhandene Desktop-App (Python, Clean Architecture, SQLite): Erfassung geleisteter Zeiten, Sollstunden, Urlaub/Krank/Feiertage, Excel-Export. Geplant: Login und Upload der Zeiteinträge als JSON-Liste an das Backend – mit Token und **privaten Zertifikatsdateien**. |
-| **[Backend/](./Backend/)** | Geplante eigenständige GraphQL-API (Python, Clean Architecture, SOLID, ORM): Login mit Token im Header, Speicherung einer Zeiteintrags-Tabelle inkl. Mitarbeiter-ID; lokal PostgreSQL, in AWS Aurora DSQL. In AWS: **VPC**, DB nur intern hinter Firewall/Security Groups; API von außen freigegeben. |
-| **[Frontend/](./Frontend/)** | Geplante React-App: Login und Übersicht der geleisteten Stunden über das Backend. In AWS: **VPC**, von außen für Benutzer erreichbar (HTTPS). |
+| **[Desktop/](./Desktop/)** | **Bereits vorhandene Desktop-App** (Python, Clean Architecture, SQLite): Erfassung geleisteter Zeiten, Sollstunden, Urlaub/Krank/Feiertage, Excel-Export. Geplant: Login und Upload der Zeiteinträge als JSON-Liste an das Backend – mit Token und **privaten Zertifikatsdateien**. |
+| **[Backend/](./Backend/)** | **Geplante eigenständige GraphQL-API** (Python, Clean Architecture, SOLID, ORM): Login mit Token im Header, Speicherung einer Zeiteintrags-Tabelle inkl. Mitarbeiter-ID; lokal PostgreSQL, in AWS Aurora DSQL. In AWS: **VPC**, DB nur intern hinter Firewall/Security Groups; API von außen freigegeben. |
+| **[Frontend/](./Frontend/)** | **Geplante React-App**: Login und Übersicht der geleisteten Stunden über das Backend. In AWS: **VPC**, von außen für Benutzer erreichbar (HTTPS). |
 
 Details und Aufgabenliste: **[Planung.md](./Planung.md)**.
 
