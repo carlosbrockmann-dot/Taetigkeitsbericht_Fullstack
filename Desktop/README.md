@@ -43,14 +43,11 @@ Beschreibung der Sollstunden-Berechnung (nach Vertrag und nach Stundenplan), Kom
 
 Diese Anwendung soll eine plattformübergreifendes Desktop-Frontend ergeben, das die Zeitaufschreibung in eine SQLite-Datenbank speichert. Die Auswahl der Spalten, die nach Excel exportiert werden sollen, ist in einer zentralen Config-Datei einstellbar (config.toml). 
 
-## Web-Frontend
+## Geplanter Server-Upload (siehe Repository-Root)
 
-Über IndexedDB wird man sich die eigenen Einträge sichern, die man mit dem Backend synchronisieren kann. 
+Geplant (noch nicht implementiert): Login gegen das Backend, danach Upload der Zeiteinträge als JSON-Liste. Die Verbindung zum Server erfolgt mit **Token im Header** und **privaten Zertifikatsdateien** (TLS/mTLS). Backend und Frontend laufen in AWS in einer VPC; die Datenbank ist nur intern hinter Firewall/Security Groups erreichbar.
 
-## Backend über GraphQL
-
-Die Kommunikation soll zu einer GraphQL-API geschehen, wenn man am Monatsende die Stunden "abgeben" will und die Abrechnung für den Monat geschehen soll. 
-Dann spätestens muss man sich vorher einloggen und ein Token für die Abgabe erhalten. 
+Details: [../Planung.md](../Planung.md), [../README.md](../README.md).
 
 ## Anbindung zur Datenbank
 
