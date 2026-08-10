@@ -68,10 +68,40 @@ Netzwerk-Zielbild und Aufgaben: [../Planung.md](../Planung.md) (AWS-Netzwerk, Ph
 
 | Dieses Backend | Desktop | Frontend |
 |----------------|---------|----------|
-| Zentrale Speicherung und Auth (C# Minimal API + Hot Chocolate); VPC + DB-Firewall | Lokale Erfassung (Python, Clean Architecture); Upload mit Token + privaten Zertifikaten | React-Übersicht + Login; öffentlich in VPC erreichbar |
+| Zentrale Speicherung und Auth (C# Controllers + Services); VPC + DB-Firewall | Lokale Erfassung (Python, Clean Architecture); Upload mit Token + privaten Zertifikaten | React-Übersicht + Login; öffentlich in VPC erreichbar |
 
 Das Backend bleibt **eigenständig** (eigene Solution/Projekt, keine Vermischung mit Desktop-SQLite).
 
 ## Nächste Schritte
 
-Aufgaben und Reihenfolge: **[../Planung.md](../Planung.md)** (Phase 1, Phase 4 VPC). Setup-Anleitung (`dotnet new web`, Migrationen, Startbefehl) folgt mit der Implementierung.
+Aufgaben und Reihenfolge: **[../Planung.md](../Planung.md)** (Phase 1, Phase 4 VPC).
+
+### Lokal starten (aktueller Stand)
+
+1. PostgreSQL On-Premises mit DB `taetigkeitsbericht` (Connection String in `src/appsettings.json`).
+2. Migration anwenden: `dotnet ef database update` im Ordner `src/`.
+3. Start: `dotnet run` im Ordner `src/`.
+
+| Endpoint | Auth | Zweck |
+|----------|------|--------|
+| `POST /api/auth/register` | nein | Mitarbeiter registrieren; sendet Bestätigungs-E-Mail |
+| `GET /api/auth/confirm-email?token=` | nein | E-Mail-Adresse bestätigen |
+| `POST /api/auth/login` | nein | Login → JWT (nur nach E-Mail-Bestätigung) |
+| `POST /api/zeiteintraege` | JWT | Liste von Zeiteinträgen speichern |
+| `GET /api/zeiteintraege?von=&bis=` | JWT | Eigene Zeiteinträge abfragen |
+
+E-Mail-Versand: standardmäßig `LoggingEmailSender` (Link im Log). Für SMTP: `Smtp:Enabled=true` in `appsettings.json`.
+
+### GraphQL / Banana Cake Pop
+
+Nach `dotnet run`: **[http://localhost:5108/graphql](http://localhost:5108/graphql)** bzw. HTTPS-Port aus `launchSettings.json`.
+
+| GraphQL | Entspricht |
+|---------|------------|
+| Mutation `register` | Registrierung + Bestätigungs-E-Mail |
+| Mutation `confirmEmail` | E-Mail bestätigen |
+| Mutation `login` | Login → JWT |
+| Mutation `speichereZeiteintraege` | Zeiteinträge speichern (JWT im HTTP-Header) |
+| Query `zeiteintraege` | Zeiteinträge abfragen (JWT) |
+
+In Banana Cake Pop unter **HTTP Headers** z. B. `Authorization: Bearer <token>` setzen (Token aus `login`).
