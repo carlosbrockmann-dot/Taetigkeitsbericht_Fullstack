@@ -2,9 +2,9 @@
 
 <strong style="color:blue">Geplante React-Applikation (noch nicht implementiert).</strong>
 
-Web-Oberfläche zur Anmeldung und zur Übersicht der geleisteten Stunden. Kommunikation ausschließlich mit dem Backend (GraphQL), nicht mit der lokalen Desktop-SQLite-Datenbank.
+Web-Oberfläche zur Anmeldung und zur Übersicht der geleisteten Stunden. Kommunikation ausschließlich mit dem Backend, nicht mit der lokalen Desktop-SQLite-Datenbank.
 
-<p style="color:red">Status: Planung – siehe <a href="../Planung.md">../Planung.md</a></p>
+<p style="color:red">Status: Planung – siehe <a href="../Planung.md">../Planung.md</a>. Backend-Technik: <a href="../README.md">../README.md</a></p>
 
 ## Ziele
 
@@ -19,11 +19,11 @@ Web-Oberfläche zur Anmeldung und zur Übersicht der geleisteten Stunden. Kommun
 | Thema | Vorschlag |
 |-------|-----------|
 | UI | React (TypeScript), z. B. Vite |
-| API | GraphQL-Client (z. B. Apollo oder urql) |
-| Auth | Token aus Login-Mutation → Authorization-Header |
+| API | Client gegen die Backend-API (Basis-URL konfigurierbar) |
+| Auth | Token nach Login → Authorization-Header |
 | AWS | Deployment in VPC; öffentliche Freigabe nur für die Web-UI (und Aufruf der freigegebenen Backend-API) |
 
-Konkrete Bibliotheken werden bei Implementierung festgelegt; Abgleich mit Backend-Schema in [../Planung.md](../Planung.md).
+Konkrete Bibliotheken werden bei Implementierung festgelegt. Details zur Backend-API: [../README.md](../README.md), [../Planung.md](../Planung.md).
 
 ## Zusammenspiel und AWS
 
@@ -32,10 +32,10 @@ Benutzer (Browser)
     │  HTTPS (öffentliche Freigabe)
     ▼
 ┌──────────── AWS VPC ────────────┐
-│  Frontend  →  Backend (GraphQL) │
+│  Frontend  →  Backend           │
 │                  │              │
 │                  ▼              │
-│         Aurora DSQL (intern,    │
+│         Datenbank (intern,      │
 │         Firewall/SG)            │
 └─────────────────────────────────┘
 ```
@@ -43,7 +43,7 @@ Benutzer (Browser)
 - Frontend und Backend in der **VPC**
 - Datenbank nur **intern** vom Backend erreichbar (Firewall / Security Groups)
 - Benutzer erreichen Frontend (und die freigegebene Backend-API) von **außen**
-- Desktop nutzt dasselbe Backend mit Login-Token und **privaten Zertifikatsdateien** (siehe Desktop/Backend)
+- Desktop nutzt dasselbe Backend mit Login-Token und **privaten Zertifikatsdateien** (siehe Desktop)
 
 Daten kommen aus Uploads der Desktop-App (JSON-Liste von Zeiteinträgen mit Mitarbeiter-Bezug).
 

@@ -2,7 +2,7 @@
 
 Monorepo für lokale Zeiterfassung, Server-Upload und Web-Übersicht.
 
-<strong style="color:blue">Desktop ist ein Python-Projekt; Backend ebenfalls Python (geplant); Frontend React (geplant).</strong>
+<strong style="color:blue">Desktop ist ein Python-Projekt; Backend C# / ASP.NET Core Minimal API mit Hot Chocolate und Npgsql (geplant); Frontend React (geplant).</strong>
 
 <p style="color:red">Backend und Frontend sind in Planung – siehe <a href="./Planung.md">Planung.md</a>. Implementierung steht aus.</p>
 
@@ -11,7 +11,7 @@ Monorepo für lokale Zeiterfassung, Server-Upload und Web-Übersicht.
 | Ordner | Beschreibung |
 |--------|----------------|
 | **[Desktop/](./Desktop/)** | **Bereits vorhandene Desktop-App** (Python, Clean Architecture, SQLite): Erfassung geleisteter Zeiten, Sollstunden, Urlaub/Krank/Feiertage, Excel-Export. Geplant: Login und Upload der Zeiteinträge als JSON-Liste an das Backend – mit Token und **privaten Zertifikatsdateien**. |
-| **[Backend/](./Backend/)** | **Geplante eigenständige GraphQL-API** (Python, Clean Architecture, SOLID, ORM): Login mit Token im Header, Speicherung einer Zeiteintrags-Tabelle inkl. Mitarbeiter-ID; lokal PostgreSQL, in AWS Aurora DSQL. In AWS: **VPC**, DB nur intern hinter Firewall/Security Groups; API von außen freigegeben. |
+| **[Backend/](./Backend/)** | **Geplante eigenständige GraphQL-API** (C# / ASP.NET Core **Minimal API**, **Hot Chocolate**, **Npgsql**/EF Core): Login mit Token im Header, Speicherung einer Zeiteintrags-Tabelle inkl. Mitarbeiter-ID; **On-Premises PostgreSQL**, in **AWS Aurora DSQL**. In AWS: **VPC**, DB nur intern hinter Firewall/Security Groups; API von außen freigegeben. Keine Clean Architecture. |
 | **[Frontend/](./Frontend/)** | **Geplante React-App**: Login und Übersicht der geleisteten Stunden über das Backend. In AWS: **VPC**, von außen für Benutzer erreichbar (HTTPS). |
 
 Details und Aufgabenliste: **[Planung.md](./Planung.md)**.
@@ -26,7 +26,7 @@ Desktop (lokal, SQLite)
 Internet → öffentliche Freigaben (HTTPS)
     ▼
 ┌────────────── AWS VPC ──────────────┐
-│  Frontend (React)  Backend (GraphQL) │
+│  Frontend (React)  Backend (C# Minimal API + GraphQL) │
 │         │               │            │
 │         └───────┬───────┘            │
 │                 ▼                    │

@@ -47,7 +47,7 @@ Diese Anwendung soll eine plattformübergreifendes Desktop-Frontend ergeben, das
 
 Geplant (noch nicht implementiert): Login gegen das Backend, danach Upload der Zeiteinträge als JSON-Liste. Die Verbindung zum Server erfolgt mit **Token im Header** und **privaten Zertifikatsdateien** (TLS/mTLS). Backend und Frontend laufen in AWS in einer VPC; die Datenbank ist nur intern hinter Firewall/Security Groups erreichbar.
 
-Details: [../Planung.md](../Planung.md), [../README.md](../README.md).
+Details: [../Planung.md](../Planung.md), [../README.md](../README.md) (Backend-Technik nur im Root-README).
 
 ## Geplanter PDF-Export zum Ausdrucken
 

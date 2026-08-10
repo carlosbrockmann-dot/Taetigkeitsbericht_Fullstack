@@ -2,7 +2,7 @@
 
 Dieses Dokument beschreibt die geplanten Aufgaben. **Noch keine Implementierung.**
 
-Ziel: Die vorhandene Desktop-Applikation (`Desktop/`) kann geleistete Zeiten als JSON-Liste an ein eigenständiges Backend hochladen. Ein React-Frontend zeigt die Übersicht. Authentifizierung erfolgt per Login; gültige Anmeldedaten liefern ein Token, das im HTTP-Header mitgeschickt wird. Die API ist GraphQL. Persistenz lokal mit PostgreSQL, in AWS mit Aurora DSQL.
+Ziel: Die vorhandene Desktop-Applikation (`Desktop/`) kann geleistete Zeiten als JSON-Liste an ein eigenständiges **C#-Backend** (ASP.NET Core **Minimal API**, GraphQL mit Hot Chocolate) hochladen. Ein React-Frontend zeigt die Übersicht. Authentifizierung erfolgt per Login; gültige Anmeldedaten liefern ein Token, das im HTTP-Header mitgeschickt wird. Die API ist GraphQL. Persistenz: **On-Premises PostgreSQL**, in **AWS Aurora DSQL**.
 
 Orientierung für die Server-Tabelle: Desktop-`Zeiteintrag` (siehe `Desktop/readme_models.md`), ergänzt um **Mitarbeiter-ID**.
 
@@ -15,7 +15,7 @@ Orientierung für die Server-Tabelle: Desktop-`Zeiteintrag` (siehe `Desktop/read
 | Komponente | Ordner | Rolle |
 |------------|--------|--------|
 | Desktop | `Desktop/` | Lokale Zeiterfassung (SQLite); neu: Login + Upload zum Server (Token + private Zertifikate) |
-| Backend | `Backend/` | Eigenständige GraphQL-API, Clean Architecture, ORM, Auth, Speicherung; AWS in VPC |
+| Backend | `Backend/` | Eigenständige GraphQL-API in **C# / ASP.NET Core Minimal API** + **Hot Chocolate** + **Npgsql**/EF Core, Auth, Speicherung; AWS in VPC |
 | Frontend | `Frontend/` | React-App: Login + Übersicht geleisteter Stunden; AWS in VPC, öffentlich erreichbar |
 
 ---
@@ -54,8 +54,8 @@ Internet / Benutzer / Desktop
 - [ ] **0.1** Datenkontrakt festlegen: JSON-Schema einer Upload-Liste (Felder analog `Zeiteintrag` + `mitarbeiter_id`, Datums-/Zeitformate, Mandantenbezug falls nötig).
 - [ ] **0.2** Auth-Kontrakt festlegen: Login-Mutation bzw. Endpoint, Token-Typ (z. B. JWT), Header-Name (z. B. `Authorization: Bearer …`), Ablaufzeit.
 - [ ] **0.3** GraphQL-Oberfläche skizzieren: Login, Upload der Zeiteinträge, Abfragen für Übersicht (Filter nach Mitarbeiter, Zeitraum).
-- [ ] **0.4** DB-Zielbilder klären: lokales PostgreSQL vs. AWS Aurora DSQL (Treiber, Connection-String, Einschränkungen DSQL).
-- [ ] **0.5** Verzeichnisstruktur Backend/Frontend anlegen (nur Gerüst, siehe Phasen 1–2); bestehende Desktop-Struktur nicht unnötig umbauen.
+- [ ] **0.4** DB-Zielbilder dokumentieren (festgelegt): **On-Premises = PostgreSQL**, **AWS = Aurora DSQL** (Treiber Npgsql, Connection-Strings, Einschränkungen DSQL).
+- [ ] **0.5** Verzeichnisstruktur Backend/Frontend anlegen (C#-Solution-Gerüst + Frontend-Gerüst; bestehende Desktop-Struktur nicht unnötig umbauen).
 - [ ] **0.6** AWS-VPC-Konzept skizzieren: Subnets (öffentlich/privat), Security Groups, welche Ports von außen (Frontend, Backend-API) vs. nur intern (DB).
 - [ ] **0.7** Desktop-Zertifikatsmodell festlegen: private Zertifikatsdateien (Client-Zertifikat, privater Schlüssel, CA), Speicherort/Config, Ausstellung und Rotation.
 
@@ -63,35 +63,35 @@ Internet / Benutzer / Desktop
 
 ## Phase 1 – Backend (`Backend/`)
 
-Eigenständige Python-Applikation, **Clean Architecture**, **SOLID**. GraphQL-API. ORM (an Desktop angelehnt: SQLAlchemy / SQLModel o. ä.).
+Eigenständige **C#-Applikation** als **ASP.NET Core Minimal API**. GraphQL: **Hot Chocolate**. Datenbankzugriff: **Npgsql** + **Entity Framework Core**. **Keine** Clean Architecture / keine Domain-Application-Infrastructure-Schichten – schlankes Web-Projekt.
 
 ### 1.1 Architektur und Projektgerüst
 
-- [ ] **1.1.1** Schichten anlegen: Domain, Application, Infrastructure (Persistence, Auth), Presentation (GraphQL).
-- [ ] **1.1.2** Dependency Rule und Dependency Injection: äußere Schichten hängen von inneren ab; Repositories hinter Interfaces.
-- [ ] **1.1.3** Konfiguration (Umgebung): DB-URL, Secret für Tokens, CORS für Frontend; Trennung lokal / AWS; TLS-/Zertifikatspfad für Desktop-Clients.
-- [ ] **1.1.4** `requirements.txt` / Dev-Abhängigkeiten, README (siehe `Backend/README.md`), lokaler Start (z. B. Uvicorn).
+- [ ] **1.1.1** Minimal-API-Projekt anlegen (`dotnet new web` o. ä.): `Program.cs`, einfache Ordner (z. B. Models, Data, GraphQL) bei Bedarf.
+- [ ] **1.1.2** Services in DI registrieren: `DbContext`, Auth/JWT, Hot Chocolate – ohne Repository-Abstraktionsschicht.
+- [ ] **1.1.3** Konfiguration (Umgebung): Connection Strings für **On-Premises PostgreSQL** und **AWS Aurora DSQL**, Token-Secret, CORS für Frontend; Trennung On-Premises / AWS (`appsettings`, User Secrets / Umgebungsvariablen); TLS-/Zertifikatspfad für Desktop-Clients.
+- [ ] **1.1.4** NuGet-Abhängigkeiten, README (siehe `Backend/README.md`), lokaler Start (`dotnet run`).
 - [ ] **1.1.5** TLS am API-Endpunkt: Server-Zertifikat; optionale/verpflichtende Client-Zertifikatsprüfung für Desktop-Upload (mTLS).
 
 ### 1.2 Domäne und Persistenz
 
 - [ ] **1.2.1** Entität **Mitarbeiter** (mindestens ID, Benutzername, Passwort-Hash; weitere Felder nach Bedarf).
 - [ ] **1.2.2** Entität **Zeiteintrag** (Server): Felder wie Desktop-`Zeiteintrag` / `ArbeitszeitBasis`, plus **`mitarbeiter_id`** (Pflicht, FK).
-- [ ] **1.2.3** ORM-Modelle und Migrationen (einfache Tabelle(n); Index auf `mitarbeiter_id`, ggf. `(mitarbeiter_id, datum)`).
-- [ ] **1.2.4** Repository-Interfaces und Implementierungen (Clean Architecture).
-- [ ] **1.2.5** Lokale PostgreSQL-Anbindung (Docker optional dokumentieren).
-- [ ] **1.2.6** AWS Aurora DSQL: Connection/Adapter, Konfigurationsprofil; Abweichungen zu klassischem PostgreSQL dokumentieren und abfangen.
+- [ ] **1.2.3** EF-Core-`DbContext`, Modelle und Migrationen (einfache Tabelle(n); Index auf `mitarbeiter_id`, ggf. `(mitarbeiter_id, datum)`).
+- [ ] **1.2.4** Datenzugriff über `DbContext` in GraphQL-Resolvern / Services (kein separates Repository-Layer).
+- [ ] **1.2.5** **On-Premises:** PostgreSQL-Anbindung über **Npgsql** / EF Core (Docker optional dokumentieren).
+- [ ] **1.2.6** **AWS:** Aurora DSQL – Connection/Adapter, Konfigurationsprofil; Abweichungen zu klassischem PostgreSQL dokumentieren und abfangen.
 
 ### 1.3 Authentifizierung
 
-- [ ] **1.3.1** Passwort-Hashing (z. B. Argon2/bcrypt); kein Klartext in der DB.
-- [ ] **1.3.2** Login-Anwendungsfall: Benutzername + Passwort prüfen → Token ausstellen.
-- [ ] **1.3.3** Token-Validierung für geschützte GraphQL-Operationen (Kontext / Middleware); bei ungültigem/fehlendem Token ablehnen.
+- [ ] **1.3.1** Passwort-Hashing (z. B. ASP.NET Core PasswordHasher / bcrypt); kein Klartext in der DB.
+- [ ] **1.3.2** Login: Benutzername + Passwort prüfen → Token ausstellen (JWT o. ä.).
+- [ ] **1.3.3** Token-Validierung für geschützte GraphQL-Operationen (Auth-Middleware / Hot-Chocolate-Authorize); bei ungültigem/fehlendem Token ablehnen.
 - [ ] **1.3.4** Seed oder Admin-Weg für erste Testbenutzer (nur Entwicklung).
 
 ### 1.4 GraphQL-API
 
-- [ ] **1.4.1** GraphQL-Framework einbinden (z. B. Strawberry oder Ariadne) passend zum Stack.
+- [ ] **1.4.1** Hot Chocolate in die Minimal API einbinden (`AddGraphQLServer`, `MapGraphQL`).
 - [ ] **1.4.2** Mutation **Login** → Token (+ ggf. Mitarbeiter-Infos).
 - [ ] **1.4.3** Mutation **Upload Tätigkeitsbericht**: Body als **Liste von Einträgen im JSON-Format** (Input-Typ / JSON-Scalar); Authentifizierung über Token im Header; `mitarbeiter_id` aus Token ableiten oder gegen Token prüfen.
 - [ ] **1.4.4** Validierung der Liste (Pflichtfelder, Zeitfenster/Pausen analog Desktop-Regeln wo sinnvoll).
@@ -100,8 +100,8 @@ Eigenständige Python-Applikation, **Clean Architecture**, **SOLID**. GraphQL-AP
 
 ### 1.5 Qualität Backend
 
-- [ ] **1.5.1** Unit-Tests Domain/Application; Integrationstests Repository + GraphQL (Test-DB).
-- [ ] **1.5.2** SOLID prüfen: SRP in Use Cases, DIP über Interfaces, keine Framework-Leaks in die Domain.
+- [ ] **1.5.1** Tests für Kernlogik und Integrationstests GraphQL + Test-DB (xUnit/NUnit).
+- [ ] **1.5.2** Code schlank halten: klare Ordner, keine unnötigen Abstraktionsschichten.
 
 ---
 
@@ -137,7 +137,7 @@ React-Applikation, kommuniziert mit dem Backend.
 
 ## Phase 4 – Integration, AWS-VPC und Betrieb
 
-- [ ] **4.1** End-to-End lokal: Desktop-Login → Upload JSON-Liste → Einträge in PostgreSQL → Anzeige im React-Frontend.
+- [ ] **4.1** End-to-End On-Premises: Desktop-Login → Upload JSON-Liste → Einträge in **PostgreSQL** → Anzeige im React-Frontend.
 - [ ] **4.2** CORS und Auth-Header über alle drei Komponenten abstimmen.
 - [ ] **4.3** **VPC anlegen/konfigurieren:** öffentliche und private Subnets; Backend und Frontend in der VPC betreiben.
 - [ ] **4.4** **Firewall / Security Groups:** Aurora DSQL nur von Backend (App-Subnet) erreichbar; kein öffentlicher DB-Zugriff.
@@ -153,8 +153,8 @@ React-Applikation, kommuniziert mit dem Backend.
 1. Exakte Upload-Semantik: nur Einfügen, Upsert, oder Monats-Ersatz?
 2. Darf ein Mitarbeiter nur eigene Daten sehen, oder gibt es Rollen (Admin/Auswertung)?
 3. Soll `mandant_id` aus dem Desktop mit auf den Server?
-4. GraphQL-Bibliothek und ORM final wählen (Vorschlag: SQLModel/SQLAlchemy + Strawberry, konsistent zum Desktop).
-5. Aurora-DSQL-Kompatibilität der gewählten ORM-Features (Migrationen, Transaktionen) prüfen.
+4. ~~GraphQL-Bibliothek und ORM~~ – **entschieden:** Hot Chocolate + Npgsql / EF Core; Architektur Minimal API.
+5. Aurora-DSQL-Kompatibilität der gewählten EF-Core-/Npgsql-Features (Migrationen, Transaktionen) prüfen.
 6. mTLS nur für Desktop, oder auch für Browser-Frontend? (Browser typisch ohne Client-Zertifikat; Desktop mit privaten Zertifikatsdateien.)
 7. Wer stellt die privaten Zertifikate aus (interne CA, ACM Private CA, manuell)?
 
@@ -163,7 +163,7 @@ React-Applikation, kommuniziert mit dem Backend.
 ## Empfohlene Reihenfolge
 
 1. Phase 0 (Kontrakte inkl. VPC- und Zertifikatskonzept)  
-2. Phase 1 Backend (Auth + Tabelle + Upload + Query + TLS)  
+2. Phase 1 Backend C# (Auth + Tabelle + Upload + Query + TLS)  
 3. Phase 2 Desktop (Login + Upload + private Zertifikate)  
 4. Phase 3 Frontend (Login + Übersicht)  
 5. Phase 4 Integration / AWS-VPC / Firewall-Freigaben  
