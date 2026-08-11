@@ -1,0 +1,327 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Tätigkeitsbericht VPC, EC2 (Backend/Frontend), Aurora DSQL und PrivateLink-Endpoint.
+  DB-Traffic bleibt in der VPC (Interface Endpoint Port 5432).
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: taetigkeitsbericht
+  LatestAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-2023/x86_64/standard
+  InstanceType:
+    Type: String
+    Default: t3.small
+  KeyName:
+    Type: String
+    Default: ""
+    Description: Optional EC2 key pair name (leave empty to skip SSH key)
+  ForceInstanceRefresh:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: When true, bumps UserData so EC2 resources are replaced
+
+Conditions:
+  HasKeyName: !Not [!Equals [!Ref KeyName, ""]]
+  RefreshInstances: !Equals [!Ref ForceInstanceRefresh, "true"]
+
+Resources:
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.20.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-vpc"
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-igw"
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.20.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-public-a"
+
+  PublicSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.20.2.0/24
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-public-b"
+
+  PrivateSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.20.11.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-private-a"
+
+  PrivateSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.20.12.0/24
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-private-b"
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-public-rt"
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetARouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetA
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnetBRouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetB
+      RouteTableId: !Ref PublicRouteTable
+
+  # --- Security Groups ---
+  SgFrontend:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Frontend HTTP(S)
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-sg-frontend"
+
+  SgBackend:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Backend GraphQL HTTP(S)
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 5108
+          ToPort: 5108
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-sg-backend"
+
+  SgDsqlEndpoint:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Aurora DSQL PrivateLink endpoint (5432 from Backend)
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref SgBackend
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-sg-dsql-vpce"
+
+  # --- IAM for EC2 (SSM + DSQL connect) ---
+  Ec2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-ec2-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: DsqlConnect
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dsql:DbConnect
+                  - dsql:DbConnectAdmin
+                Resource: "*"
+        - PolicyName: DeployArtifactRead
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub "arn:aws:s3:::${ProjectName}-deploy-*"
+                  - !Sub "arn:aws:s3:::${ProjectName}-deploy-*/*"
+
+  Ec2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref Ec2Role
+
+  # --- Aurora DSQL ---
+  DsqlCluster:
+    Type: AWS::DSQL::Cluster
+    Properties:
+      DeletionProtection: false
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-dsql"
+        - Key: DatabaseIntent
+          Value: Taetigkeitsbericht
+
+  DsqlVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    DependsOn: DsqlCluster
+    Properties:
+      VpcId: !Ref Vpc
+      ServiceName: !GetAtt DsqlCluster.VpcEndpointServiceName
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref PrivateSubnetA
+        - !Ref PrivateSubnetB
+      SecurityGroupIds:
+        - !Ref SgDsqlEndpoint
+
+  # --- EC2 Backend / Frontend ---
+  BackendInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      ImageId: !Ref LatestAmiId
+      IamInstanceProfile: !Ref Ec2InstanceProfile
+      SubnetId: !Ref PublicSubnetA
+      SecurityGroupIds:
+        - !Ref SgBackend
+      KeyName: !If [HasKeyName, !Ref KeyName, !Ref AWS::NoValue]
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-backend"
+        - Key: Role
+          Value: backend
+        - Key: RefreshBump
+          Value: !If [RefreshInstances, !Sub "${AWS::StackId}-refresh", "stable"]
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -eux
+          dnf update -y || yum update -y
+          dnf install -y docker nginx git || yum install -y docker nginx git
+          systemctl enable docker
+          systemctl start docker
+          usermod -aG docker ec2-user || true
+          mkdir -p /opt/taetigkeitsbericht/backend
+          # Refresh marker: ${ForceInstanceRefresh}
+
+  FrontendInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      ImageId: !Ref LatestAmiId
+      IamInstanceProfile: !Ref Ec2InstanceProfile
+      SubnetId: !Ref PublicSubnetB
+      SecurityGroupIds:
+        - !Ref SgFrontend
+      KeyName: !If [HasKeyName, !Ref KeyName, !Ref AWS::NoValue]
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-frontend"
+        - Key: Role
+          Value: frontend
+        - Key: RefreshBump
+          Value: !If [RefreshInstances, !Sub "${AWS::StackId}-refresh", "stable"]
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -eux
+          dnf update -y || yum update -y
+          dnf install -y nginx git || yum install -y nginx git
+          systemctl enable nginx
+          systemctl start nginx
+          mkdir -p /usr/share/nginx/html
+          # Refresh marker: ${ForceInstanceRefresh}
+
+Outputs:
+  VpcId:
+    Value: !Ref Vpc
+  BackendInstanceId:
+    Value: !Ref BackendInstance
+  FrontendInstanceId:
+    Value: !Ref FrontendInstance
+  BackendPublicIp:
+    Value: !GetAtt BackendInstance.PublicIp
+  FrontendPublicIp:
+    Value: !GetAtt FrontendInstance.PublicIp
+  DsqlClusterArn:
+    Value: !Ref DsqlCluster
+  DsqlEndpoint:
+    Description: Cluster endpoint hostname (connect via PrivateLink private DNS in VPC)
+    Value: !GetAtt DsqlCluster.Endpoint
+  DsqlVpcEndpointServiceName:
+    Value: !GetAtt DsqlCluster.VpcEndpointServiceName
+  Ec2RoleArn:
+    Description: Link DB role verwaltung to this IAM role via AWS IAM GRANT
+    Value: !GetAtt Ec2Role.Arn

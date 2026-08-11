@@ -1,0 +1,237 @@
+name: Deploy AWS (main)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      force_instance_refresh:
+        description: "EC2-Instanzen per CloudFormation ersetzen"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  STACK_NAME: taetigkeitsbericht
+  PROJECT_NAME: taetigkeitsbericht
+
+jobs:
+  deploy-infra:
+    name: CloudFormation VPC + EC2 + DSQL
+    runs-on: ubuntu-latest
+    outputs:
+      backend_instance_id: ${{ steps.outs.outputs.backend_instance_id }}
+      frontend_instance_id: ${{ steps.outs.outputs.frontend_instance_id }}
+      backend_public_ip: ${{ steps.outs.outputs.backend_public_ip }}
+      frontend_public_ip: ${{ steps.outs.outputs.frontend_public_ip }}
+      dsql_endpoint: ${{ steps.outs.outputs.dsql_endpoint }}
+      ec2_role_arn: ${{ steps.outs.outputs.ec2_role_arn }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Deploy / update CloudFormation stack
+        id: cfn
+        env:
+          FORCE_REFRESH: ${{ github.event_name == 'workflow_dispatch' && inputs.force_instance_refresh || 'false' }}
+        run: |
+          set -euo pipefail
+          PARAMS=(
+            "ProjectName=${PROJECT_NAME}"
+            "ForceInstanceRefresh=${FORCE_REFRESH}"
+          )
+          if [ -n "${{ secrets.EC2_KEY_NAME }}" ]; then
+            PARAMS+=("KeyName=${{ secrets.EC2_KEY_NAME }}")
+          fi
+
+          aws cloudformation deploy \
+            --stack-name "${STACK_NAME}" \
+            --template-file infra/cloudformation/taetigkeitsbericht-aws.yml \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --no-fail-on-empty-changeset \
+            --parameter-overrides "${PARAMS[@]}"
+
+      - name: Export stack outputs
+        id: outs
+        run: |
+          set -euo pipefail
+          get() { aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
+            --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" --output text; }
+          echo "backend_instance_id=$(get BackendInstanceId)" >> "$GITHUB_OUTPUT"
+          echo "frontend_instance_id=$(get FrontendInstanceId)" >> "$GITHUB_OUTPUT"
+          echo "backend_public_ip=$(get BackendPublicIp)" >> "$GITHUB_OUTPUT"
+          echo "frontend_public_ip=$(get FrontendPublicIp)" >> "$GITHUB_OUTPUT"
+          echo "dsql_endpoint=$(get DsqlEndpoint)" >> "$GITHUB_OUTPUT"
+          echo "ec2_role_arn=$(get Ec2RoleArn)" >> "$GITHUB_OUTPUT"
+
+  build-and-deploy-apps:
+    name: Build & deploy Backend + Frontend auf EC2
+    needs: deploy-infra
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: Frontend/package-lock.json
+
+      - name: Publish Backend
+        run: |
+          dotnet publish Backend/src/Taetigkeitsbericht.Backend.csproj \
+            -c Release \
+            -o artifacts/backend
+
+      - name: Build Frontend
+        working-directory: Frontend
+        env:
+          BACKEND_PUBLIC: ${{ secrets.BACKEND_HOST_PUBLIC }}
+          BACKEND_IP: ${{ needs.deploy-infra.outputs.backend_public_ip }}
+        run: |
+          if [ -n "${BACKEND_PUBLIC}" ]; then
+            export VITE_GRAPHQL_URL="${BACKEND_PUBLIC%/}/graphql"
+          else
+            export VITE_GRAPHQL_URL="http://${BACKEND_IP}:5108/graphql"
+          fi
+          echo "VITE_GRAPHQL_URL=$VITE_GRAPHQL_URL"
+          npm ci
+          npm run build
+
+      - name: Pack artifacts
+        run: |
+          mkdir -p dist
+          tar -czf dist/backend.tar.gz -C artifacts/backend .
+          tar -czf dist/frontend.tar.gz -C Frontend/dist .
+
+      - name: Upload artifacts to S3 staging
+        id: s3
+        run: |
+          set -euo pipefail
+          BUCKET="${PROJECT_NAME}-deploy-${{ github.run_id }}-${{ github.run_attempt }}"
+          # Temporärer Bucket pro Run (oder festen Deploy-Bucket in Secrets nutzen)
+          if ! aws s3api head-bucket --bucket "$BUCKET" 2>/dev/null; then
+            if [ "${AWS_REGION}" = "us-east-1" ]; then
+              aws s3api create-bucket --bucket "$BUCKET"
+            else
+              aws s3api create-bucket --bucket "$BUCKET" \
+                --create-bucket-configuration LocationConstraint="${AWS_REGION}"
+            fi
+          fi
+          aws s3 cp dist/backend.tar.gz "s3://${BUCKET}/backend.tar.gz"
+          aws s3 cp dist/frontend.tar.gz "s3://${BUCKET}/frontend.tar.gz"
+          echo "bucket=${BUCKET}" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for SSM on instances
+        run: |
+          set -euo pipefail
+          for ID in "${{ needs.deploy-infra.outputs.backend_instance_id }}" \
+                    "${{ needs.deploy-infra.outputs.frontend_instance_id }}"; do
+            echo "Waiting for SSM: $ID"
+            for i in $(seq 1 36); do
+              STATUS=$(aws ssm describe-instance-information \
+                --filters "Key=InstanceIds,Values=$ID" \
+                --query "InstanceInformationList[0].PingStatus" --output text || true)
+              if [ "$STATUS" = "Online" ]; then
+                echo "Online: $ID"
+                break
+              fi
+              sleep 10
+            done
+          done
+
+      - name: Deploy Backend via SSM
+        env:
+          INSTANCE_ID: ${{ needs.deploy-infra.outputs.backend_instance_id }}
+          DSQL_ENDPOINT: ${{ needs.deploy-infra.outputs.dsql_endpoint }}
+          BUCKET: ${{ steps.s3.outputs.bucket }}
+          JWT_KEY: ${{ secrets.JWT_KEY }}
+        run: |
+          set -euo pipefail
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --comment "Deploy Backend" \
+            --parameters commands='[
+              "set -eux",
+              "dnf install -y tar gzip awscli || yum install -y tar gzip awscli",
+              "mkdir -p /opt/taetigkeitsbericht/backend",
+              "aws s3 cp s3://'"${BUCKET}"'/backend.tar.gz /tmp/backend.tar.gz",
+              "tar -xzf /tmp/backend.tar.gz -C /opt/taetigkeitsbericht/backend",
+              "cat > /etc/systemd/system/taetigkeitsbericht-backend.service <<EOF\n[Unit]\nDescription=Taetigkeitsbericht Backend\nAfter=network.target\n[Service]\nWorkingDirectory=/opt/taetigkeitsbericht/backend\nExecStart=/usr/bin/dotnet /opt/taetigkeitsbericht/backend/Taetigkeitsbericht.Backend.dll --urls=http://0.0.0.0:5108\nRestart=always\nEnvironment=ASPNETCORE_ENVIRONMENT=Production\nEnvironment=Jwt__Key='"${JWT_KEY}"'\nEnvironment=ConnectionStrings__DefaultConnection=Host='"${DSQL_ENDPOINT}"';Port=5432;Database=postgres;Username=verwaltung;SSL Mode=Require\n[Install]\nWantedBy=multi-user.target\nEOF",
+              "curl -fsSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin --channel 10.0",
+              "ln -sfn $HOME/.dotnet/dotnet /usr/local/bin/dotnet || true",
+              "systemctl daemon-reload",
+              "systemctl enable taetigkeitsbericht-backend",
+              "systemctl restart taetigkeitsbericht-backend"
+            ]' \
+            --query "Command.CommandId" --output text)
+          aws ssm wait command-executed --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" || true
+          aws ssm get-command-invocation --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" \
+            --query "[Status,StandardOutputContent,StandardErrorContent]" --output text
+
+      - name: Deploy Frontend via SSM
+        env:
+          INSTANCE_ID: ${{ needs.deploy-infra.outputs.frontend_instance_id }}
+          BUCKET: ${{ steps.s3.outputs.bucket }}
+        run: |
+          set -euo pipefail
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --comment "Deploy Frontend" \
+            --parameters commands='[
+              "set -eux",
+              "dnf install -y tar gzip awscli nginx || yum install -y tar gzip awscli nginx",
+              "aws s3 cp s3://'"${BUCKET}"'/frontend.tar.gz /tmp/frontend.tar.gz",
+              "rm -rf /usr/share/nginx/html/*",
+              "tar -xzf /tmp/frontend.tar.gz -C /usr/share/nginx/html",
+              "systemctl enable nginx",
+              "systemctl restart nginx"
+            ]' \
+            --query "Command.CommandId" --output text)
+          aws ssm wait command-executed --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" || true
+          aws ssm get-command-invocation --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" \
+            --query "[Status,StandardOutputContent,StandardErrorContent]" --output text
+
+      - name: Cleanup staging bucket
+        if: always()
+        run: |
+          BUCKET="${{ steps.s3.outputs.bucket }}"
+          if [ -n "$BUCKET" ] && [ "$BUCKET" != "None" ]; then
+            aws s3 rb "s3://${BUCKET}" --force || true
+          fi
+
+      - name: Summary
+        run: |
+          echo "### Deploy fertig" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Frontend: http://${{ needs.deploy-infra.outputs.frontend_public_ip }}/" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Backend:  http://${{ needs.deploy-infra.outputs.backend_public_ip }}:5108/graphql" >> "$GITHUB_STEP_SUMMARY"
+          echo "- DSQL endpoint: ${{ needs.deploy-infra.outputs.dsql_endpoint }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- EC2 Role (für AWS IAM GRANT verwaltung): ${{ needs.deploy-infra.outputs.ec2_role_arn }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Hinweis: Aurora DSQL braucht IAM-Tokens statt festem Passwort \`verwaltung\`. Siehe infra/README.md." >> "$GITHUB_STEP_SUMMARY"

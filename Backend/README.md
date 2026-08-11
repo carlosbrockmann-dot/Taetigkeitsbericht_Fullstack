@@ -299,11 +299,13 @@ Fehler beim SMTP-Versand erscheinen in der GraphQL-Antwort / im Log (`E-Mail kon
 | Umgebung | Datenbank |
 |----------|-----------|
 | **On-Premises** | PostgreSQL |
-| **AWS** | Aurora DSQL (geplant) |
+| **AWS** | Aurora DSQL |
 
 - Umschaltung über Connection String / Umgebung
-- **AWS:** DB nur intern in der VPC (Security Groups) – kein öffentlicher DB-Zugang
-- API von außen per HTTPS (z. B. über ALB) für Frontend und Desktop
+- **AWS:** DB-Zugriff über **VPC + PrivateLink** (kein öffentlicher DB-Port); siehe [infra/README.md](../infra/README.md)
+- **CI/CD:** Push auf `main` → [`.github/workflows/deploy-aws.yml`](../.github/workflows/deploy-aws.yml) (CloudFormation + EC2-Deploy)
+- Aurora DSQL authentifiziert mit **IAM-Tokens**, nicht mit festem DB-Passwort
+- API von außen per HTTPS (z. B. Port 80/443 bzw. 5108) für Frontend und Desktop
 - Introspection in Production standardmäßig aus (`DisableIntrospection`)
 
 Orientierung Desktop-Modell: [../Desktop/readme_models.md](../Desktop/readme_models.md)  

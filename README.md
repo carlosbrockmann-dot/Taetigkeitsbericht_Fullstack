@@ -49,5 +49,7 @@ Siehe Abschnitt „AWS-Netzwerk und Sicherheit“ in [Planung.md](./Planung.md).
 ## Weiterführende READMEs
 
 - [Desktop/README.md](./Desktop/README.md) – Clean Architecture, Setup, Tests der Desktop-App  
-- [Backend/README.md](./Backend/README.md) – geplantes Backend  
-- [Frontend/README.md](./Frontend/README.md) – geplantes Frontend  
+- [Backend/README.md](./Backend/README.md) – GraphQL-Backend  
+- [Frontend/README.md](./Frontend/README.md) – React Online-Ansicht  
+- [infra/README.md](./infra/README.md) – AWS VPC, Aurora DSQL, EC2, GitHub Actions Deploy  
+- [Deploy_aws.md](./Deploy_aws.md) – konkrete Schritte für den AWS-Deploy (Desktop bleibt on premises)  
