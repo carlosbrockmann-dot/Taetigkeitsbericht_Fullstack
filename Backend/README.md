@@ -44,12 +44,21 @@ Keine Controllers-Schicht: Business-Logik über Services; Clients sprechen Graph
 
 ## Lokal starten
 
+Solution: `Backend/Taetigkeitsbericht.Backend.slnx` (Projekte unter `src/` und `test/`).
+
+### Tests
+
+```powershell
+cd Backend
+dotnet test Taetigkeitsbericht.Backend.slnx
+```
+
 ### HTTP (ohne Zertifikat)
 
 ```powershell
-cd Backend/src
-dotnet ef database update
-dotnet run --launch-profile http
+cd Backend
+dotnet ef database update --project src
+dotnet run --project src --launch-profile http
 ```
 
 - URL: **http://localhost:5108**
@@ -66,8 +75,8 @@ dotnet dev-certs https --trust
 Dann:
 
 ```powershell
-cd Backend/src
-dotnet run --launch-profile https
+cd Backend
+dotnet run --project src --launch-profile https
 ```
 
 - HTTPS: **https://localhost:7022** (GraphiQL: `/graphiql`)
@@ -243,11 +252,11 @@ User Secrets sind im Projekt initialisiert (`UserSecretsId` in der `.csproj`).
 ### User Secrets setzen (SMTP, z. B. GMX)
 
 ```powershell
-cd Backend/src
-dotnet user-secrets set "Smtp:Enabled" "true"
-dotnet user-secrets set "Smtp:From" "IHRE_ADRESSE@gmx.de"
-dotnet user-secrets set "Smtp:UserName" "IHRE_ADRESSE@gmx.de"
-dotnet user-secrets set "Smtp:Password" "IHR_PASSWORT"
+cd Backend
+dotnet user-secrets set "Smtp:Enabled" "true" --project src
+dotnet user-secrets set "Smtp:From" "IHRE_ADRESSE@gmx.de" --project src
+dotnet user-secrets set "Smtp:UserName" "IHRE_ADRESSE@gmx.de" --project src
+dotnet user-secrets set "Smtp:Password" "IHR_PASSWORT" --project src
 ```
 
 Optional, falls Host/Port nicht in `appsettings` stehen:

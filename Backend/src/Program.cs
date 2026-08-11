@@ -172,3 +172,5 @@ app.MapGet("/", () => app.Environment.IsDevelopment()
     : Results.Text("Taetigkeitsbericht.Backend"));
 
 app.Run();
+
+public partial class Program;

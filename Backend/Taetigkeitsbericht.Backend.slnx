@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Taetigkeitsbericht.Backend.csproj" />
+  </Folder>
+  <Folder Name="/test/">
+    <Project Path="test/Taetigkeitsbericht.Backend.Tests.Unit/Taetigkeitsbericht.Backend.Tests.Unit.csproj" />
+    <Project Path="test/Taetigkeitsbericht.Backend.Tests.Integration/Taetigkeitsbericht.Backend.Tests.Integration.csproj" />
+  </Folder>
+</Solution>

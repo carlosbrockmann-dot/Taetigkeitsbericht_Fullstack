@@ -30,7 +30,10 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<Zeiteintrag>(entity =>
         {
             entity.ToTable("zeiteintrag");
-            entity.Property(z => z.Id).HasDefaultValueSql("gen_random_uuid()");
+            if (Database.IsNpgsql())
+            {
+                entity.Property(z => z.Id).HasDefaultValueSql("gen_random_uuid()");
+            }
             entity.Property(z => z.Kategorie)
                 .HasConversion<string>()
                 .HasMaxLength(40)
@@ -46,7 +49,10 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<LoginToken>(entity =>
         {
             entity.ToTable("login_token");
-            entity.Property(t => t.Id).HasDefaultValueSql("gen_random_uuid()");
+            if (Database.IsNpgsql())
+            {
+                entity.Property(t => t.Id).HasDefaultValueSql("gen_random_uuid()");
+            }
             entity.HasIndex(t => t.Jti).IsUnique();
             entity.HasIndex(t => new { t.MitarbeiterId, t.WiderrufenAm });
             entity.HasOne(t => t.Mitarbeiter)
