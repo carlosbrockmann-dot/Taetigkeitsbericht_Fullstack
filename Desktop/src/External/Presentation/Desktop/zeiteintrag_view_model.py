@@ -137,14 +137,82 @@ class ZeiteintragViewModel(QObject):
     def set_mandant_id(self, mandant_id: int) -> None:
         self._mandant_id = mandant_id
 
-    def liste_gespeicherte_im_monat(self, jahr: int, monat: int) -> list[Zeiteintrag]:
-        """Persistierte Einträge des Monats (ohne UI-Platzhalter ohne Zeiten)."""
-        mandant_id = self._aktuelle_mandant_id()
-        return [
+    def ist_zeitraum_geladen(self, jahr: int, monat: int) -> bool:
+        return (
+            self._monat_mit_guthaben is not None
+            and self._geladenes_jahr == jahr
+            and self._geladenes_monat == monat
+        )
+
+    def liste_fuer_monatsabgabe(self) -> list[ZeiteintragsDTO]:
+        """
+        Abgabe an Backend: Eintraege mit gesetzter Kategorie (U/K) oder
+        geregelter Arbeitstag (Vertrags-Soll) mit Von und Bis.
+
+        Pro Datum+Mandant: beliebig viele Arbeitseintraege mit verschiedenen
+        Uhrzeiten; Urlaub/Krankheit hoechstens einmal.
+        Nur der aktuell ausgewaehlte Mandant; am Backend nur fuer den
+        eingeloggten Mitarbeiter.
+        """
+        if self._monat_mit_guthaben is None:
+            return []
+        if self._geladenes_jahr is None or self._geladenes_monat is None:
+            return []
+        mandant_id = self._mandant_id
+        if mandant_id is None:
+            return []
+        relevant = [
             e
-            for e in self._anwendung.liste(mandant_id, jahr=jahr, monat=monat)
-            if e.uhrzeit_von is not None and e.uhrzeit_bis is not None
+            for e in self._monat_mit_guthaben.eintraege
+            if e.mandant_id == mandant_id and self._dto_ist_abgaberelevant(e)
         ]
+        return self._normalisiere_fuer_monatsabgabe(relevant)
+
+    def _dto_ist_abgaberelevant(self, eintrag: ZeiteintragsDTO) -> bool:
+        if (eintrag.kategorie or "").strip():
+            return True
+        if eintrag.uhrzeit_von is None or eintrag.uhrzeit_bis is None:
+            return False
+        return self._ist_geregelter_arbeitstag(eintrag.datum)
+
+    def _ist_geregelter_arbeitstag(self, datum: date) -> bool:
+        if isinstance(self._anwendung, ZeiteintragAnwendungDTO):
+            return self._anwendung.ist_geregelter_arbeitstag(datum)
+        return datum.isoweekday() < 6
+
+    @staticmethod
+    def _normalisiere_fuer_monatsabgabe(
+        eintraege: list[ZeiteintragsDTO],
+    ) -> list[ZeiteintragsDTO]:
+        """
+        - Kategorie U/K: max. ein Eintrag je (Datum, MandantId)
+        - Arbeitstag: mehrere Eintraege je Tag erlaubt, gleiche Von/Bis nur einmal
+        """
+        from collections import defaultdict
+
+        nach_tag: dict[tuple[date, int | None], list[ZeiteintragsDTO]] = defaultdict(list)
+        for eintrag in eintraege:
+            nach_tag[(eintrag.datum, eintrag.mandant_id)].append(eintrag)
+
+        ergebnis: list[ZeiteintragsDTO] = []
+        for (datum, mandant_id) in sorted(
+            nach_tag.keys(), key=lambda k: (k[0], k[1] is None, k[1] or 0)
+        ):
+            gruppe = nach_tag[(datum, mandant_id)]
+            mit_kategorie = [e for e in gruppe if (e.kategorie or "").strip()]
+            if mit_kategorie:
+                ergebnis.append(mit_kategorie[0])
+                continue
+
+            gesehen_zeiten: set[tuple[time | None, time | None]] = set()
+            for eintrag in gruppe:
+                schluessel = (eintrag.uhrzeit_von, eintrag.uhrzeit_bis)
+                if schluessel in gesehen_zeiten:
+                    continue
+                gesehen_zeiten.add(schluessel)
+                ergebnis.append(eintrag)
+
+        return ergebnis
 
     @contextmanager
     def anreicherung_ausgesetzt(self):
@@ -677,7 +745,6 @@ class ZeiteintragViewModel(QObject):
             eintrag.pause2_ende,
         )
         row.anmerkung = eintrag.anmerkung or ""
-        row.info = eintrag.info or ""
         row.geleistete_stunden = (
             eintrag.geleistete_stunden.strftime("%H:%M")
             if eintrag.geleistete_stunden
@@ -698,6 +765,7 @@ class ZeiteintragViewModel(QObject):
         row.ist_feiertag = eintrag.ist_feiertag
         row.ist_ferien = eintrag.ist_ferien
         row.ist_betriebsferien = eintrag.ist_betriebsferien
+        row.kategorie = eintrag.kategorie
         row.feiertagsname = eintrag.feiertagsname or ""
         row.schulferienname = eintrag.schulferienname or ""
 
@@ -721,7 +789,6 @@ class ZeiteintragViewModel(QObject):
             else "",
             pause2_ende=eintrag.pause2_ende.strftime("%H:%M") if eintrag.pause2_ende else "",
             anmerkung=eintrag.anmerkung or "",
-            info=eintrag.info or "",
             geleistete_stunden=eintrag.geleistete_stunden.strftime("%H:%M") if eintrag.geleistete_stunden else "",
             soll_stunden_nach_stundenplan=eintrag.soll_stunden_nach_Stundenplan.strftime("%H:%M") if eintrag.soll_stunden_nach_Stundenplan else "",
             soll_stunden_nach_vertrag=eintrag.soll_stunden_nach_vertrag.strftime("%H:%M") if eintrag.soll_stunden_nach_vertrag else "",
@@ -730,6 +797,7 @@ class ZeiteintragViewModel(QObject):
             ist_feiertag=eintrag.ist_feiertag,
             ist_ferien=eintrag.ist_ferien,
             ist_betriebsferien=eintrag.ist_betriebsferien,
+            kategorie=eintrag.kategorie,
             feiertagsname=eintrag.feiertagsname or "",
             schulferienname=eintrag.schulferienname or "",
         )

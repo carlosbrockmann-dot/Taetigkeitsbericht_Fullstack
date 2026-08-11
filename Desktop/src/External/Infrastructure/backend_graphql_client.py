@@ -13,7 +13,7 @@ from Core.Domain.interfaces.backend_api_interface import (
     BackendRegisterResult,
     BackendUploadResult,
 )
-from Core.Domain.models.models_worktime import Zeiteintrag
+from Core.Domain.models.models_worktime import Zeiteintrag, ZeiteintragsDTO
 from External.Infrastructure.authentication_settings import AuthenticationSettings
 
 
@@ -23,9 +23,26 @@ def _zeit_als_graphql(wert: time | None) -> Optional[str]:
     return wert.strftime("%H:%M:%S")
 
 
-def _zeiteintrag_zu_input(eintrag: Zeiteintrag) -> dict[str, Any]:
+def _kategorie_aus_dto(eintrag: ZeiteintragsDTO) -> str:
+    """Mappt Spalte Kategorie (U/K/leer) auf GraphQL-Enum ZeiteintragKategorie."""
+    kuerzel = (eintrag.kategorie or "").strip().upper()
+    if kuerzel == "K":
+        return "KRANKHEIT"
+    if kuerzel == "U":
+        return "URLAUB"
+    # leer = Arbeitstag; weitere Kuerzel spaeter erweiterbar
+    return "ARBEITSTAG"
+
+
+def _zeiteintrag_zu_input(eintrag: Zeiteintrag | ZeiteintragsDTO) -> dict[str, Any]:
+    kategorie = (
+        _kategorie_aus_dto(eintrag)
+        if isinstance(eintrag, ZeiteintragsDTO)
+        else "ARBEITSTAG"
+    )
     payload: dict[str, Any] = {
         "datum": eintrag.datum.isoformat(),
+        "kategorie": kategorie,
         "uhrzeitVon": _zeit_als_graphql(eintrag.uhrzeit_von),
         "uhrzeitBis": _zeit_als_graphql(eintrag.uhrzeit_bis),
         "pauseBeginn": _zeit_als_graphql(eintrag.pause_beginn),
@@ -168,7 +185,7 @@ class BackendGraphQlClient:
         )
 
     def speichere_zeiteintraege(
-        self, token: str, eintraege: list[Zeiteintrag]
+        self, token: str, eintraege: list[Zeiteintrag] | list[ZeiteintragsDTO]
     ) -> BackendUploadResult:
         query = """
         mutation Speichere($eintraege: [ZeiteintragInput!]!) {

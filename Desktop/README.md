@@ -48,12 +48,12 @@ Diese Anwendung soll eine plattformübergreifendes Desktop-Frontend ergeben, das
 Registrierung und Monats-Abgabe an das Backend sind in der Desktop-UI angebunden:
 
 - **Hamburger-Menü** (links oben) → „Am Backend registrieren…“ (modales Formular)
-- Reiter **Zeiteinträge** → Button **„Monat am Backend abgeben“** (Login + GraphQL-Upload)
+- Reiter **Zeiteinträge** → Button **„Abgeben“** (rechts neben „Für Excel kopieren“; Login + GraphQL-Upload)
 - Backend-Fehler erscheinen in der **roten Leiste am unteren Fensterrand**
 
-Konfiguration: `src/authentication.toml` (Vorlage: `authentication.example.toml`) mit `base_url` (z. B. `http://localhost:5108`), Benutzername, Passwort und E-Mail.
+Konfiguration: `src/authentication.toml` (Vorlage: `authentication.example.toml`) mit `base_url` (HTTP `http://localhost:5108` oder HTTPS `https://localhost:7022`), Benutzername, Passwort und E-Mail. Bei lokalem HTTPS: Dev-Zertifikat vertrauen (`dotnet dev-certs https --trust`) oder `verify_ssl = false`.
 
-Voraussetzungen: Backend läuft; Konto ist registriert und E-Mail bestätigt. TLS/mTLS mit privaten Zertifikaten folgt später.
+Voraussetzungen: Backend läuft; Konto ist registriert und E-Mail bestätigt.
 
 Details: [../Planung.md](../Planung.md), [../Backend/README.md](../Backend/README.md).
 

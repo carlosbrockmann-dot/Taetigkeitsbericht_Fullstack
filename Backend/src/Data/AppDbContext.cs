@@ -31,7 +31,12 @@ public class AppDbContext : DbContext
         {
             entity.ToTable("zeiteintrag");
             entity.Property(z => z.Id).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(z => z.Kategorie)
+                .HasConversion<string>()
+                .HasMaxLength(40)
+                .HasDefaultValue(ZeiteintragKategorie.Arbeitstag);
             entity.HasIndex(z => new { z.MitarbeiterId, z.Datum });
+            entity.HasIndex(z => new { z.MitarbeiterId, z.Kategorie, z.Datum });
             entity.HasOne(z => z.Mitarbeiter)
                 .WithMany(m => m.Zeiteintraege)
                 .HasForeignKey(z => z.MitarbeiterId)

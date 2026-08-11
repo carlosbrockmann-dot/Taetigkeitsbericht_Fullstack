@@ -18,6 +18,7 @@ Dieses Fenster dient der **monatlichen Erfassung** Ihrer Arbeitszeiten. Die Tabe
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Zurücksetzen**               | Lädt den aktuellen Monat erneut aus der Datenbank und **verwirft** alle noch nicht gespeicherten Änderungen in der Tabelle. Die Schaltfläche ist nur aktiv, wenn es **ungespeicherte** Änderungen gibt. Vor dem Ausführen erscheint eine Sicherheitsabfrage. |
 | **Für Excel kopieren**         | Kopiert den Monat für Excel in die Zwischenablage (**vorgesehene Spalten und Formate**). Details siehe Abschnitt „Export nach Excel und Zwischenablage“.                                                                                                     |
+| **Abgeben**                    | Lädt den angezeigten Monat für den aktuellen Mandanten über das Internet an das Backend hoch (Login aus `authentication.toml`). Tooltip: „Übers Internet abgeben.“                                                                                           |
 | **Zeile hinzufügen**           | Fügt am Ende der Tabelle eine neue Zeile ein (z. B. zweiter Arbeitsblock am selben Tag).                                                                                                                                                                     |
 | **Markierte Zeile(n) löschen** | Löscht die ausgewählten Zeilen aus der Ansicht. **Erst nach „Alle Zeilen speichern“** werden Löschungen und andere Änderungen dauerhaft in der Datenbank gesichert.                                                                                          |
 | **Alle Zeilen speichern**      | Speichert den **gesamten** Monat: neue Zeilen, Änderungen und Löschungen. Bei Erfolg erscheint eine kurze Meldung in der Statuszeile unten links.                                                                                                            |
@@ -33,7 +34,8 @@ Dieses Fenster dient der **monatlichen Erfassung** Ihrer Arbeitszeiten. Die Tabe
 - **Zwei Pausenpaare** (je **Von** / **Bis**): Optional. Wenn Sie eine Pause erfassen, tragen Sie **Beginn und Ende** ein; einzelne halbe Paare sind nicht vorgesehen. Die Pausen werden bei der Berechnung der geleisteten Zeit abgezogen.
 - **Geleistet**: Die **errechnete** Netto-Arbeitszeit aus Von/Bis minus Pausen (nur Anzeige, keine direkte Eingabe).
 - **Soll** und **Vertrag**: Anzeige der **Sollzeiten** nach Stundenplan bzw. nach vertraglicher Vorgabe (abhängig von Kalendertag und Konfiguration). Details variieren je nach Tag (z. B. Feiertag, Urlaub).
-- **Kommentar**: Freitext (begrenzte Länge), z. B. Tätigkeit oder Hinweise. Unter bestimmten Bedingungen kann der Eintrag **automatisch ergänzt** werden (z. B. Kennzeichen für Urlaub/Krankheit).
+- **Kategorie**: Kurzzeichen — leer bei Arbeitstag, **U** bei Urlaub, **K** bei Krankheit; nur an **Mo–Fr mit Vertrags-Soll**, nur Anzeige.
+- **Kommentar**: Freitext (begrenzte Länge), z. B. Tätigkeit oder Hinweise. Automatisch nur bei Überstunden-frei bzw. Feiertagsname (nicht mehr U/K).
 - **Tag** (zweite Spalte mit diesem Namen), **Feiertagsname**, **Schulferienname**: Zusatzinformationen, teils für den Export nach Excel; Feiertags- und Feriennamen werden aus der Anwendungsschicht übernommen (nicht gespeichert).
 
 Zeilen mit **roter Schrift** sind **noch nicht gespeichert** oder weichen vom zuletzt geladenen Stand ab.
@@ -45,8 +47,7 @@ Zeilen mit **roter Schrift** sind **noch nicht gespeichert** oder weichen vom zu
 - **Doppelklick auf die Zelle „Datum“** (nicht auf andere Spalten) einer Zeile übernimmt für diesen Tag und diese **Zeilenposition** die passende Vorlage aus dem Reiter **Stundenplan** (gleicher Wochentag, n-te Zeile am Tag entspricht dem n-ten Block im Stundenplan).
 - An **Feiertagen** ist diese Übernahme nicht vorgesehen.
 - Wenn im Stundenplan für diesen Wochentag **kein** passender Eintrag existiert oder die Zeile nicht zur „n-ten“ Zeile des Tages passt, passiert nichts.
-- Ist das **Kommentar**-Feld der Zeile noch leer, kann die **Anmerkung aus dem Stundenplan** übernommen werden – **nicht** bei `[kommentar].kommentar_urlaub_krank_modus = "kuerzel"` in `config.toml` (dann nur Zeiten/Pausen).
-- Spalte **Info**: zeigt beim Laden den Stundenplan-Kommentar zur passenden Zeilenposition (Wochentag, n-te Zeile am Tag) – nur an Werktagen ohne Feiertag; wird **nicht** gespeichert (für späteren Excel-Export vorgesehen).
+- Ist das **Kommentar**-Feld leer oder enthält **genau ein Zeichen**, wird nach dem Doppelklick die **Anmerkung** des passenden Stundenplan-Blocks übernommen (nur Werktage ohne Feiertag).
 
 ---
 

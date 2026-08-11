@@ -27,11 +27,11 @@ DEFAULT_ZEITEINTRAG_EXCEL_UHRZEIT_SPALTEN: tuple[int, ...] = (7, 8, 9, 10, 11, 1
 DEFAULT_ZEITEINTRAG_EXCEL_DATUM_SPALTEN: tuple[int, ...] = (1,)
 DEFAULT_ZEITEINTRAG_EXCEL_INTEGER_SPALTEN: tuple[int, ...] = ()
 DEFAULT_ZEITEINTRAG_EXCEL_FLOAT_SPALTEN: tuple[int, ...] = ()
-DEFAULT_ZEITEINTRAG_EXCEL_TEXT_SPALTEN: tuple[int, ...] = (17,)
+DEFAULT_ZEITEINTRAG_EXCEL_TEXT_SPALTEN: tuple[int, ...] = (18,)
 
 DEFAULT_ZEITEINTRAG_EXCEL_CELL_SPEC: tuple[int | None, ...] = (
     0,
-    17,
+    18,
     7,
     8,
     9,
@@ -40,7 +40,7 @@ DEFAULT_ZEITEINTRAG_EXCEL_CELL_SPEC: tuple[int | None, ...] = (
     12,
     None,
     None,
-    16,
+    17,
 )
 
 
@@ -115,8 +115,6 @@ def _parse_cell_spec(raw: Any) -> tuple[int | None, ...]:
 
 ZEITEINTRAG_SPALTEN_MAX: Final[int] = 20
 
-KOMMENTAR_URLAUB_KRANK_MODI: Final[frozenset[str]] = frozenset({"praefix", "kuerzel"})
-DEFAULT_KOMMENTAR_URLAUB_KRANK_MODUS: Final[str] = "praefix"
 STUNDENPLAN_SPALTEN_MAX: Final[int] = 8
 DEFAULT_ZEITEINTRAG_GRAUER_HINTERGRUND_SPALTEN: Final[tuple[int, ...]] = (2, 3, 4, 5, 6)
 
@@ -261,10 +259,8 @@ class AppConfig:
     version: str = "0.0.0"
     mandanten: tuple[Mandant, ...] = ()
     sollstunden_an_feiertagen: bool = False
-    kommentar_urlaubstage: str = ""
-    kommentar_krankheitstage: str = ""
-    kommentar_urlaub_krank_modus: str = DEFAULT_KOMMENTAR_URLAUB_KRANK_MODUS
     kommentar_ueberstunden_frei: str = ""
+    beim_urlaub_krank_modus_kommentar_aus_stundenplan: bool = False
     sollstunden_vertrag_backup_erstellen: bool = False
     zeiteintrag_ausgeblendete_spalten: tuple[int, ...] = ()
     zeiteintrag_grauer_hintergrund_spalten: tuple[int, ...] = (
@@ -416,40 +412,22 @@ def _sollstunden_section(data: dict[str, Any]) -> dict[str, Any]:
     return sec if isinstance(sec, dict) else {}
 
 
-def _kommentar_section(data: dict[str, Any]) -> dict[str, Any]:
-    sec = data.get("kommentar")
-    return sec if isinstance(sec, dict) else {}
-
-
 def _section_sollstunden_an_feiertagen(data: dict[str, Any]) -> bool:
     return bool(_sollstunden_section(data).get("sollstunden_an_feiertagen", False))
-
-
-def _section_kommentar_urlaubstage(data: dict[str, Any]) -> str:
-    wert = _sollstunden_section(data).get("kommentar_urlaubstage", "")
-    return str(wert).strip() if wert is not None else ""
-
-
-def _section_kommentar_krankheitstage(data: dict[str, Any]) -> str:
-    wert = _sollstunden_section(data).get("kommentar_krankheitstage", "")
-    return str(wert).strip() if wert is not None else ""
-
-
-def _section_kommentar_urlaub_krank_modus(data: dict[str, Any]) -> str:
-    wert = _kommentar_section(data).get(
-        "kommentar_urlaub_krank_modus", DEFAULT_KOMMENTAR_URLAUB_KRANK_MODUS
-    )
-    modus = str(wert).strip().lower() if wert is not None else DEFAULT_KOMMENTAR_URLAUB_KRANK_MODUS
-    if modus == "prefix":
-        modus = "praefix"
-    if modus not in KOMMENTAR_URLAUB_KRANK_MODI:
-        return "kuerzel"
-    return modus
 
 
 def _section_kommentar_ueberstunden_frei(data: dict[str, Any]) -> str:
     wert = _sollstunden_section(data).get("kommentar_ueberstunden_frei", "")
     return str(wert).strip() if wert is not None else ""
+
+
+def _section_beim_urlaub_krank_modus_kommentar_aus_stundenplan(data: dict[str, Any]) -> bool:
+    return _parse_bool_wert(
+        _sollstunden_section(data).get(
+            "beim_urlaub_krank_modus_kommentar_aus_Stundenplan"
+        ),
+        default=False,
+    )
 
 
 def _section_sollstunden_vertrag_backup_erstellen(data: dict[str, Any]) -> bool:
@@ -564,10 +542,10 @@ def load_app_config(config_path: Path | None = None) -> AppConfig:
         version=str(data.get("version", "0.0.0")),
         mandanten=mandanten,
         sollstunden_an_feiertagen=_section_sollstunden_an_feiertagen(data),
-        kommentar_urlaubstage=_section_kommentar_urlaubstage(data),
-        kommentar_krankheitstage=_section_kommentar_krankheitstage(data),
-        kommentar_urlaub_krank_modus=_section_kommentar_urlaub_krank_modus(data),
         kommentar_ueberstunden_frei=_section_kommentar_ueberstunden_frei(data),
+        beim_urlaub_krank_modus_kommentar_aus_stundenplan=_section_beim_urlaub_krank_modus_kommentar_aus_stundenplan(
+            data
+        ),
         sollstunden_vertrag_backup_erstellen=_section_sollstunden_vertrag_backup_erstellen(
             data
         ),

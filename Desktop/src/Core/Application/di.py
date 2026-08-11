@@ -155,10 +155,10 @@ class ApplicationDIModule(Module):
             guthaben_stunden_anwendung,
         )
         anwendung.set_sollstunden_an_feiertagen(app_config.sollstunden_an_feiertagen)
-        anwendung.set_kommentar_urlaubstage(app_config.kommentar_urlaubstage)
-        anwendung.set_kommentar_krankheitstage(app_config.kommentar_krankheitstage)
-        anwendung.set_kommentar_urlaub_krank_modus(app_config.kommentar_urlaub_krank_modus)
         anwendung.set_kommentar_ueberstunden_frei(app_config.kommentar_ueberstunden_frei)
+        anwendung.set_beim_urlaub_krank_modus_kommentar_aus_stundenplan(
+            app_config.beim_urlaub_krank_modus_kommentar_aus_stundenplan
+        )
         return anwendung
 
     @singleton

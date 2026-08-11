@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Optional, Protocol
 
-from Core.Domain.models.models_worktime import Zeiteintrag
+from Core.Domain.models.models_worktime import Zeiteintrag, ZeiteintragsDTO
 
 
 @dataclass(frozen=True)
@@ -42,6 +42,6 @@ class IBackendApiClient(Protocol):
         ...
 
     def speichere_zeiteintraege(
-        self, token: str, eintraege: list[Zeiteintrag]
+        self, token: str, eintraege: list[Zeiteintrag] | list[ZeiteintragsDTO]
     ) -> BackendUploadResult:
         ...

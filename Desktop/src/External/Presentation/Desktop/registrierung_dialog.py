@@ -150,8 +150,11 @@ class RegistrierungDialog(QDialog):
             self._status.setText(result.error or "Registrierung fehlgeschlagen.")
             return
 
-        text_teile = [result.hinweis or "Registrierung erfolgreich."]
-        if result.confirmation_link:
-            text_teile.append(f"Bestätigungslink:\n{result.confirmation_link}")
-        QMessageBox.information(self, "Registrierung", "\n\n".join(text_teile))
+        nachricht = (
+            result.hinweis
+            or "Registrierung erfolgreich. Bitte die E-Mail zur Bestätigung prüfen "
+            "(auch Spam-Ordner)."
+        )
+        # Bestätigungslink bewusst nicht anzeigen – der kommt per E-Mail.
+        QMessageBox.information(self, "Registrierung", nachricht)
         self.accept()

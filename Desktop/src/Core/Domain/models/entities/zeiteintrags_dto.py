@@ -5,13 +5,10 @@ from typing import Optional
 
 from pydantic import Field, model_validator
 
-from .arbeitszeit_basis import ArbeitszeitBasis
 from .zeiteintrag import Zeiteintrag
 
 
 class ZeiteintragsDTO(Zeiteintrag):
-    uhrzeit_von: Optional[time] = Field(description="Startzeit", default=None)
-    uhrzeit_bis: Optional[time] = Field(description="Endzeit", default=None)
     geleistete_stunden: Optional[time] = Field(description="Endzeit", default=None)
     soll_stunden_nach_Stundenplan: Optional[time] = Field(
         description="Soll-Stunden nach Stundenplan", default=None
@@ -30,10 +27,10 @@ class ZeiteintragsDTO(Zeiteintrag):
     schulferienname: Optional[str] = Field(
         default=None, max_length=80, description="Name der Schulferien"
     )
-    info: Optional[str] = Field(
-        default=None,
-        max_length=100,
-        description="Stundenplan-Kommentar (nur Anzeige, nicht persistiert)",
+    kategorie: str = Field(
+        default="",
+        max_length=1,
+        description="Anzeige: leer / U / K — nur an geregelten Vertragstagen",
     )
 
     @model_validator(mode="after")
@@ -47,4 +44,5 @@ class ZeiteintragsDTO(Zeiteintrag):
             return self
         if (self.pause2_beginn is None) ^ (self.pause2_ende is None):
             return self
-        return ArbeitszeitBasis.pruefe_zeitraeume(self)
+        self._validiere_zeitraeume()
+        return self

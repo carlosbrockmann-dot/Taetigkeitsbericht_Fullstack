@@ -1,0 +1,10 @@
+{
+  "venvPath": "Desktop",
+  "venv": ".venv",
+  "executionEnvironments": [
+    {
+      "root": "Desktop/src",
+      "extraPaths": ["Desktop/src"]
+    }
+  ]
+}

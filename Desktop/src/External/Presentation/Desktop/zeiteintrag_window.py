@@ -629,6 +629,10 @@ class ZeiteintragWindow(QMainWindow):
             "Spalten „blank“ (z. B. Geleistet/Soll) werden übersprungen. "
             "In Excel mit Strg+V einfügen."
         )
+        self._monat_abgeben_button = QPushButton("Abgeben", self)
+        self._monat_abgeben_button.setToolTip("Übers Internet abgeben.")
+        self._monat_abgeben_button.setStyleSheet("color: red;")
+        self._monat_abgeben_button.setEnabled(self._backend_anwendung is not None)
         self._loesch_hinweis_label = QLabel(self)
         self._loesch_hinweis_label.setStyleSheet("color: red;")
         self._loesch_hinweis_label.setAlignment(
@@ -638,12 +642,7 @@ class ZeiteintragWindow(QMainWindow):
         self._zeile_hinzufuegen_button = QPushButton("Zeile hinzufügen", self)
         self._zeile_loeschen_button = QPushButton("Markierte Zeile(n) löschen", self)
         self._speichern_button = QPushButton("Alle Zeilen speichern", self)
-        self._monat_abgeben_button = QPushButton("Monat am Backend abgeben", self)
-        self._monat_abgeben_button.setToolTip(
-            "Meldet sich mit den Zugangsdaten aus authentication.toml am Backend an "
-            "und lädt die Zeiteinträge des angezeigten Monats hoch."
-        )
-        self._monat_abgeben_button.setEnabled(self._backend_anwendung is not None)
+        self._speichern_button.setStyleSheet("color: blue; font-weight: bold;")
         self._status_label = QLabel("Bereit.", self)
         self._status_label.setSizePolicy(
             QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
@@ -677,6 +676,7 @@ class ZeiteintragWindow(QMainWindow):
         toolbar_layout.addWidget(self._jahr_spin)
         toolbar_layout.addWidget(self._monat_combo)
         toolbar_layout.addWidget(self._excel_kopieren_button)
+        toolbar_layout.addWidget(self._monat_abgeben_button)
         toolbar_layout.addStretch(1)
         toolbar_layout.addWidget(self._loesch_hinweis_label)
         toolbar_layout.addStretch(1)
@@ -684,7 +684,6 @@ class ZeiteintragWindow(QMainWindow):
         toolbar_layout.addWidget(self._zeile_hinzufuegen_button)
         toolbar_layout.addWidget(self._zeile_loeschen_button)
         toolbar_layout.addWidget(self._speichern_button)
-        toolbar_layout.addWidget(self._monat_abgeben_button)
 
         self._table = QTableView(self)
         self._table.setModel(self._view_model.table_model)
@@ -712,10 +711,10 @@ class ZeiteintragWindow(QMainWindow):
         horizontal_header.resizeSection(ZeiteintragSpalte.SOLL, 72)
         horizontal_header.resizeSection(ZeiteintragSpalte.VERTRAG, 88)
         horizontal_header.resizeSection(
-            ZeiteintragSpalte.KOMMENTAR, ZeiteintragSpalte.KOMMENTAR_MIN_BREITE
+            ZeiteintragSpalte.KATEGORIE, ZeiteintragSpalte.KATEGORIE_SPALTE_BREITE
         )
         horizontal_header.resizeSection(
-            ZeiteintragSpalte.INFO, ZeiteintragSpalte.INFO_MIN_BREITE
+            ZeiteintragSpalte.KOMMENTAR, ZeiteintragSpalte.KOMMENTAR_MIN_BREITE
         )
         horizontal_header.resizeSection(ZeiteintragSpalte.TAG_EXCEL, 34)
         horizontal_header.resizeSection(
@@ -897,16 +896,11 @@ class ZeiteintragWindow(QMainWindow):
             selection_model.selectionChanged.connect(self._on_selection_changed)
 
     def _aktualisiere_kommentar_breite(self) -> None:
-        """Kommentar: min. KOMMENTAR_MIN_BREITE, Rest Viewport; Info: fest INFO_MIN_BREITE."""
+        """Kommentar: min. KOMMENTAR_MIN_BREITE, Rest Viewport."""
         model = self._table.model()
         if model is None:
             return
         header = self._table.horizontalHeader()
-        if not self._table.isColumnHidden(ZeiteintragSpalte.INFO):
-            if header.sectionSize(ZeiteintragSpalte.INFO) != ZeiteintragSpalte.INFO_MIN_BREITE:
-                header.resizeSection(
-                    ZeiteintragSpalte.INFO, ZeiteintragSpalte.INFO_MIN_BREITE
-                )
         feste_breite = sum(
             header.sectionSize(col)
             for col in range(model.columnCount())
@@ -1287,16 +1281,24 @@ class ZeiteintragWindow(QMainWindow):
             if not frage_ja_nein(
                 self,
                 "Ungespeicherte Änderungen",
-                "Es gibt ungespeicherte Änderungen. Trotzdem die gespeicherten "
-                "Datenbank-Einträge des Monats abgeben?",
+                "Es gibt ungespeicherte Änderungen. Es wird die zuletzt geladene "
+                "Monatsübersicht (inkl. Urlaub/Krankheit) abgegeben – nicht die "
+                "ungespeicherten Tabellenänderungen. Trotzdem fortfahren?",
             ):
                 return
 
         jahr, monat = self._selected_period()
-        eintraege = self._view_model.liste_gespeicherte_im_monat(jahr, monat)
+        if not self._view_model.ist_zeitraum_geladen(jahr, monat):
+            self._zeige_backend_fehler(
+                "Bitte zuerst den gewünschten Monat laden (Anzeige aktualisieren)."
+            )
+            return
+
+        eintraege = self._view_model.liste_fuer_monatsabgabe()
         if not eintraege:
             self._zeige_backend_fehler(
-                f"Keine gespeicherten Zeiteinträge für {monat:02d}/{jahr} zum Abgeben."
+                f"Keine abzugebenden Zeiteinträge für {monat:02d}/{jahr} "
+                "(geregelte Arbeitstage mit Von/Bis oder Kategorie U/K)."
             )
             return
 
@@ -1314,7 +1316,7 @@ class ZeiteintragWindow(QMainWindow):
             return
 
         self._loesche_backend_fehler()
-        self._set_status(
+        self._set_status_text(
             f"{result.anzahl} Zeiteintrag/Zeiteinträge für {monat:02d}/{jahr} "
             "am Backend abgegeben."
         )
@@ -1512,10 +1514,8 @@ class ZeiteintragWindow(QMainWindow):
         self._view_model.uebernehme_stundenplan_in_zeile(row_idx, stundenplan_zeile)
 
         row = model.rows[row_idx]
-        if (
-            self._app_config.kommentar_urlaub_krank_modus != "kuerzel"
-            and not row.anmerkung.strip()
-        ):
+        # Leer oder genau ein Zeichen (z. B. altes U/K): Stundenplan-Anmerkung übernehmen
+        if len(row.anmerkung.strip()) <= 1 and datum.isoweekday() < 6:
             kommentar = stundenplan_zeile.anmerkung.strip()
             if kommentar:
                 model.setData(

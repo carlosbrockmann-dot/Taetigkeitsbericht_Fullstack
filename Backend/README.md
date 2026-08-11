@@ -44,6 +44,8 @@ Keine Controllers-Schicht: Business-Logik über Services; Clients sprechen Graph
 
 ## Lokal starten
 
+### HTTP (ohne Zertifikat)
+
 ```powershell
 cd Backend/src
 dotnet ef database update
@@ -52,11 +54,60 @@ dotnet run --launch-profile http
 
 - URL: **http://localhost:5108**
 - GraphiQL: **http://localhost:5108/graphiql**
-- Profil `http` setzt `ASPNETCORE_ENVIRONMENT=Development` (nötig für User Secrets und GraphiQL)
+
+### HTTPS (Dev-Zertifikat)
+
+Einmalig das ASP.NET-Core-Entwicklungzertifikat anlegen und vertrauen:
+
+```powershell
+dotnet dev-certs https --trust
+```
+
+Dann:
+
+```powershell
+cd Backend/src
+dotnet run --launch-profile https
+```
+
+- HTTPS: **https://localhost:7022** (GraphiQL: `/graphiql`)
+- HTTP bleibt parallel: **http://localhost:5108** (wird per HTTPS-Redirect auf 7022 umgeleitet)
+- Das Profil setzt `EmailConfirmation:ConfirmationBaseUrl` auf `https://localhost:7022` (Bestätigungslinks in Mails)
+
+Profil `http` bzw. `https` setzt jeweils `ASPNETCORE_ENVIRONMENT=Development` (User Secrets, GraphiQL, Introspection).
 
 Connection String: `ConnectionStrings:DefaultConnection` in `appsettings.json`.
 
 Nach Änderungen an Secrets oder `appsettings` **Backend neu starten** (Konfiguration wird nur beim Start geladen).
+
+### Desktop gegen HTTPS
+
+In `Desktop/src/authentication.toml`:
+
+```toml
+[webapi]
+base_url = "https://localhost:7022"
+# Nach "dotnet dev-certs https --trust" kann verify_ssl true bleiben.
+# Ohne vertrautes Zertifikat:
+# verify_ssl = false
+```
+
+### Eigenes Zertifikat / Produktion (Kestrel)
+
+Ohne Launch-Profil (z. B. Docker, Windows Service) HTTPS über Kestrel konfigurieren – Zertifikatspfad und Passwort **nicht** in Git, sondern User Secrets / Env:
+
+```powershell
+dotnet user-secrets set "Kestrel:Certificates:Default:Path" "C:\certs\api.pfx"
+dotnet user-secrets set "Kestrel:Certificates:Default:Password" "CERT_PASSWORT"
+```
+
+Oder Endpunkte explizit (Env):
+
+```text
+ASPNETCORE_URLS=https://0.0.0.0:7022;http://0.0.0.0:5108
+```
+
+In AWS typischerweise TLS am Load Balancer; die App dahinter kann HTTP in der VPC sprechen.
 
 ### Startup-Log E-Mail
 
@@ -75,7 +126,7 @@ Wenn `Smtp.Enabled=False` oder Zugangsdaten fehlen, wird **keine** echte Mail ge
 | `POST /graphql` → `register` | nein | Registrierung + Bestätigungs-E-Mail |
 | `POST /graphql` → `login` | nein | Login → JWT (nur nach E-Mail-Bestätigung) |
 | `POST /graphql` → `confirmEmail` | nein | E-Mail bestätigen (alternative zur GET-URL) |
-| `POST /graphql` → `speichereZeiteintraege` | JWT | Zeiteinträge speichern |
+| `POST /graphql` → `speichereZeiteintraege` | JWT | Monat abgeben: vorhandene Einträge **nur für diesen Mitarbeiter, Mandanten und Monat** ersetzen, dann neu speichern. Alle Einträge der Abgabe müssen denselben Mandanten haben. Pro Datum+Mandant: mehrere **Arbeitstage** mit unterschiedlichen Uhrzeiten; **Urlaub/Krankheit** höchstens einmal (nicht gemischt mit Arbeit am selben Tag). |
 | `POST /graphql` → Query `zeiteintraege` | JWT | Eigene Zeiteinträge (`von` / `bis` optional) |
 | `GET /api/auth/confirm-email?token=` | nein | Bestätigungslink aus der Mail (Browser) |
 | `GET /graphql?sdl` | nein | Schema als SDL (Hot Chocolate `EnableSchemaRequests`) |
@@ -95,6 +146,20 @@ In Development liefert `register` zusätzlich `confirmationLink` in der Antwort 
 Der Bestätigungslink wird bei jeder Registrierung / erneutem Versand zudem im **Konsolen-Log** ausgegeben (`E-Mail-Bestätigungslink für …`).
 
 Tabelle `login_token`: `Id`, `MitarbeiterId`, `Jti`, `TokenHash` (SHA-256, kein Klartext-JWT), `ErstelltAm`, `LaeuftAbAm`, `WiderrufenAm`.
+
+### Modell `Zeiteintrag`
+
+| Feld | Typ | Hinweis |
+|------|-----|---------|
+| `Datum` | DateOnly | Pflicht |
+| `Kategorie` | Enum | `Arbeitstag`, `Urlaub`, `Sonderurlaub`, `Krankheit`, `Abwesenheit`, `Feiertag`, `Betriebsferien` (Default: `Arbeitstag`) |
+| `UhrzeitVon` / `UhrzeitBis` | TimeOnly? | nullable (z. B. Urlaub/Krankheit ohne Zeiten) |
+| `Pause*` | TimeOnly? | nullable |
+| `Anmerkung` | string? | max. 80 Zeichen |
+| `MandantId` | int? | optional |
+| `MitarbeiterId` | int | aus JWT |
+
+GraphQL-Input: `kategorie` optional (Default Arbeitstag); fehlende Uhrzeiten sind erlaubt.
 
 ### Beispiel-Mutationen (GraphiQL)
 
@@ -157,7 +222,7 @@ In `appsettings.json` / `appsettings.Development.json` stehen **keine** Passwör
 |-----------|-----|--------|
 | `ConnectionStrings:DefaultConnection` | appsettings | PostgreSQL |
 | `Jwt:*` | appsettings (Prod: Secret Store) | Token-Signierung |
-| `EmailConfirmation:ConfirmationBaseUrl` | appsettings | Basis-URL im Bestätigungslink (z. B. `http://localhost:5108`) |
+| `EmailConfirmation:ConfirmationBaseUrl` | appsettings / Launch-Profil | Basis-URL im Bestätigungslink (`http://localhost:5108` bzw. HTTPS-Profil `https://localhost:7022`) |
 | `EmailConfirmation:TokenExpiresHours` | appsettings | Gültigkeit des Tokens |
 | `Smtp:Host`, `Port`, `EnableSsl` | appsettings (Defaults ok) | SMTP-Server (z. B. GMX `mail.gmx.net:587`) |
 | `Smtp:Enabled`, `From`, `UserName`, `Password` | **User Secrets** / Env | Versand aktivieren + Zugangsdaten |

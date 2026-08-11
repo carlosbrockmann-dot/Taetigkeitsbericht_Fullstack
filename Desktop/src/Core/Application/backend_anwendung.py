@@ -8,7 +8,7 @@ from Core.Domain.interfaces.backend_api_interface import (
     BackendUploadResult,
     IBackendApiClient,
 )
-from Core.Domain.models.models_worktime import Zeiteintrag
+from Core.Domain.models.models_worktime import Zeiteintrag, ZeiteintragsDTO
 from External.Infrastructure.authentication_settings import AuthenticationSettings
 
 
@@ -63,7 +63,7 @@ class BackendAnwendung:
 
     def lade_monat_hoch(
         self,
-        eintraege: list[Zeiteintrag],
+        eintraege: list[Zeiteintrag] | list[ZeiteintragsDTO],
         *,
         benutzername: str | None = None,
         passwort: str | None = None,
@@ -74,7 +74,11 @@ class BackendAnwendung:
                 error="Keine Zeiteinträge für diesen Monat zum Abgeben vorhanden.",
             )
 
-        login = self.anmelden(benutzername, passwort) if not self._token else self.stelle_sicher_angemeldet()
+        login = (
+            self.anmelden(benutzername, passwort)
+            if not self._token
+            else self.stelle_sicher_angemeldet()
+        )
         if not login.ok or not login.token:
             return BackendUploadResult(
                 ok=False,
@@ -84,7 +88,6 @@ class BackendAnwendung:
         try:
             return self._client.speichere_zeiteintraege(login.token, eintraege)
         except Exception:
-            # Token ggf. ungültig → einmal neu anmelden und erneut versuchen
             self._token = None
             login = self.anmelden(benutzername, passwort)
             if not login.ok or not login.token:

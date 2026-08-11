@@ -116,6 +116,13 @@ var app = builder.Build();
         !string.IsNullOrWhiteSpace(smtp.Password));
 }
 
+app.UseHttpsRedirection();
+
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHsts();
+}
+
 app.UseAuthentication();
 app.UseAuthorization();
 

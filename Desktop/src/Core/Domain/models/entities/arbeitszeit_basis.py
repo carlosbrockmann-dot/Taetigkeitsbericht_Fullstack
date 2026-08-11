@@ -7,8 +7,8 @@ from pydantic import BaseModel, Field, model_validator
 
 
 class ArbeitszeitBasis(BaseModel):
-    uhrzeit_von: time = Field(description="Startzeit")
-    uhrzeit_bis: time = Field(description="Endzeit")
+    uhrzeit_von: Optional[time] = Field(default=None, description="Startzeit")
+    uhrzeit_bis: Optional[time] = Field(default=None, description="Endzeit")
     pause_beginn: Optional[time] = Field(default=None, description="Start der Unterbrechung")
     pause_ende: Optional[time] = Field(default=None, description="Ende der Unterbrechung")
     pause2_beginn: Optional[time] = Field(default=None, description="Start der zweiten Unterbrechung")
@@ -52,8 +52,7 @@ class ArbeitszeitBasis(BaseModel):
             )
         )
 
-    @model_validator(mode="after")
-    def pruefe_zeitraeume(self) -> ArbeitszeitBasis:
+    def _validiere_zeitraeume(self) -> None:
         if self.uhrzeit_von is not None and self.uhrzeit_bis is not None:
             if self.uhrzeit_von > self.uhrzeit_bis:
                 raise ValueError(
@@ -104,4 +103,7 @@ class ArbeitszeitBasis(BaseModel):
         ):
             raise ValueError("Pause 1 und Pause 2 dürfen sich nicht überlappen.")
 
+    @model_validator(mode="after")
+    def pruefe_zeitraeume(self) -> ArbeitszeitBasis:
+        self._validiere_zeitraeume()
         return self

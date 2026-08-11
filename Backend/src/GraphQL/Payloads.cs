@@ -33,8 +33,9 @@ public class ZeiteintragInput
     public Guid? Id { get; set; }
     public int? MandantId { get; set; }
     public DateOnly Datum { get; set; }
-    public TimeOnly UhrzeitVon { get; set; }
-    public TimeOnly UhrzeitBis { get; set; }
+    public ZeiteintragKategorie? Kategorie { get; set; }
+    public TimeOnly? UhrzeitVon { get; set; }
+    public TimeOnly? UhrzeitBis { get; set; }
     public TimeOnly? PauseBeginn { get; set; }
     public TimeOnly? PauseEnde { get; set; }
     public TimeOnly? Pause2Beginn { get; set; }
@@ -47,6 +48,7 @@ public class ZeiteintragInput
         MitarbeiterId = mitarbeiterId,
         MandantId = MandantId,
         Datum = Datum,
+        Kategorie = Kategorie ?? ZeiteintragKategorie.Arbeitstag,
         UhrzeitVon = UhrzeitVon,
         UhrzeitBis = UhrzeitBis,
         PauseBeginn = PauseBeginn,

@@ -31,6 +31,25 @@ public class ZeiteintragRepository : IZeiteintragRepository
         return liste;
     }
 
+    public async Task<IReadOnlyList<Zeiteintrag>> ReplaceMonatAsync(
+        int mitarbeiterId,
+        int? mandantId,
+        int jahr,
+        int monat,
+        IEnumerable<Zeiteintrag> eintraege,
+        CancellationToken cancellationToken = default)
+    {
+        await _db.Zeiteintraege
+            .Where(z =>
+                z.MitarbeiterId == mitarbeiterId
+                && z.MandantId == mandantId
+                && z.Datum.Year == jahr
+                && z.Datum.Month == monat)
+            .ExecuteDeleteAsync(cancellationToken);
+
+        return await AddRangeAsync(eintraege, cancellationToken);
+    }
+
     public async Task<IReadOnlyList<Zeiteintrag>> GetByMitarbeiterUndZeitraumAsync(
         int mitarbeiterId,
         DateOnly? von,

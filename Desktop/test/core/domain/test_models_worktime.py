@@ -40,6 +40,7 @@ def test_zeiteintrags_dto_unvollstaendig_ohne_validierungsfehler():
         uhrzeit_bis=None,
     )
     assert dto.uhrzeit_bis is None
+    assert dto.kategorie == ""
 
 
 def test_urlaubsantrag_nur_halbe_tage():

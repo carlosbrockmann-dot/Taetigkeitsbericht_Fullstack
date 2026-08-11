@@ -28,8 +28,20 @@ def test_urlaub_erste_zeile_geleistet_vertrag_soll():
     app = dto_anwendung(urlaub=[urlaub(montag, montag)])
     dto = zeiteintrags_dto(datum=montag)
     app.anreichere_eintraege_fuer_tag([dto])
+    assert dto.kategorie == "U"
     assert dto.geleistete_stunden == time(8, 0, 0)
     assert dto.soll_stunden_nach_vertrag == time(8, 0, 0)
+
+
+def test_urlaub_am_wochenende_ohne_kategorie_keine_vertrags_geleistet():
+    """Flags allein reichen nicht: ohne Kategorie U/K normale Geleistet-Logik."""
+    samstag = date(2025, 3, 8)
+    app = dto_anwendung(urlaub=[urlaub(samstag, samstag)])
+    dto = zeiteintrags_dto(datum=samstag)
+    app.anreichere_eintraege_fuer_tag([dto])
+    assert dto.ist_urlaub is True
+    assert dto.kategorie == ""
+    assert dto.geleistete_stunden is None
 
 
 def test_liste_im_monat_fuellt_leere_tage():

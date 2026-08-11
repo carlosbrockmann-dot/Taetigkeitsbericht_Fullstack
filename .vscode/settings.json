@@ -1,0 +1,9 @@
+{
+  "python.defaultInterpreterPath": "${workspaceFolder}/Desktop/.venv/Scripts/python.exe",
+  "python.analysis.extraPaths": [
+    "${workspaceFolder}/Desktop/src"
+  ],
+  "basedpyright.analysis.extraPaths": [
+    "${workspaceFolder}/Desktop/src"
+  ]
+}

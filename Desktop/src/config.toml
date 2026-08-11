@@ -16,22 +16,14 @@ path = "taetigkeitsbericht.db"
 
 [sollstunden]
 sollstunden_an_feiertagen = false 
-kommentar_urlaubstage = "U"
-kommentar_krankheitstage = "K"
 kommentar_ueberstunden_frei = "Ü-Frei" 
 prefix_kommentar_feiertage = "F:"
 prefix_kommentar_betriebsferientage = "B:" 
 sollstunden_vertrag_backup_erstellen = false 
+# Bei Kat. U/K ohne Von und leerem Kommentar: Anmerkung aus Stundenplan uebernehmen.
+beim_urlaub_krank_modus_kommentar_aus_Stundenplan = true
 
-[kommentar]
-# kommentar_urlaub_krank_modus — Anzeige und Speicherung in der Kommentarspalte an Urlaubs-/Krankheitstagen (Mo–Fr mit Vertrags-Soll).
-# Zulaessige Werte: "praefix" | "kuerzel" (ungueltiger Wert → Standard "kuerzel").
-#   praefix — Kuerzel mit Doppelpunkt und optionalem Zusatz (z. B. „U: “ oder „K: mein Text“)
-#   kuerzel — nur das Kuerzel aus kommentar_urlaubstage / kommentar_krankheitstage (z. B. „U“ oder „K“)
-kommentar_urlaub_krank_modus = "kuerzel"
-# kommentar_urlaub_krank_modus = "praefix"
-
-
+# U/K stehen in der Spalte Kat. (nicht mehr im Kommentar).
 
 # Zeiteintrag-Tabelle (GUI): Spaltenindex 0–20 (ZeiteintragTableModel.HEADERS).
 # [zeiteintrag_tabelle]: ausgeblendete_spalten, grauer_hintergrund_spalten (siehe Abschnitt unten).
@@ -54,8 +46,8 @@ kommentar_urlaub_krank_modus = "kuerzel"
 #  13  Geleistet        — berechnet / Anwendungsschicht, nur Anzeige
 #  14  Soll             — Soll nach Stundenplan, nur Anzeige
 #  15  Vertrag          — Soll nach Vertrag (Zeile 1 je Tag), nur Anzeige
-#  16  Kommentar        — Freitext max. 80 Zeichen, bearbeitbar
-#  17  Info             — Stundenplan-Kommentar (nur Anzeige, nicht gespeichert)
+#  16  Kategorie        — leer / U / K (aus Urlaub/Krankheit), nur Anzeige
+#  17  Kommentar        — Freitext max. 80 Zeichen, bearbeitbar
 #  18  Tag              — Kalendertag als Text fuer Excel (z. B. „7.“), nur Anzeige
 #  19  Feiertagsname    — Name des Feiertags, nur Anzeige
 #  20  Schulferienname  — Name der Schulferien, nur Anzeige
@@ -80,7 +72,7 @@ grauer_hintergrund_spalten = [2, 3, 4, 5, 6]
 # Zeiteintrag: Button „Fuer Excel kopieren“ (tab-getrennte Zwischenablage).
 #
 # cell_spec — Spaltenreihenfolge beim Einfuegen in Excel (Quellindices 0…20):
-#   - Zahl = Wert aus dieser Tabellenspalte (z. B. 0 Wochentag, 18 Kalendertag, 7 Von, 8 Bis, 16 Kommentar)
+#   - Zahl = Wert aus dieser Tabellenspalte (z. B. 0 Wochentag, 18 Kalendertag, 7 Von, 8 Bis, 17 Kommentar)
 #   - "blank" = diese Spalte beim Einfuegen nicht ueberschreiben (Formeln in Excel/Calc)
 #     Bei „blank“: zusaetzlich SpreadsheetML (ss:Index) fuer MS Excel; immer TSV fuer Calc.
 #     LibreOffice/OpenOffice Calc: nur TSV; leere Zellen im TSV als „ “ (kein Vorab-Löschen noetig).
@@ -104,5 +96,5 @@ uhrzeit_spalten = [7, 8, 9, 10, 11, 12] # Export nach Excel als Zeit
 integer_spalten = []   # Export nach Excel als Ganzzahl
 float_spalten = []     # Export nach Excel als Fließkommazahl
 text_spalten = [18]    # Export nach Excel als Text
-cell_spec = [ 0, 18, 7, 8, 9, 10, 11, 12, "blank", "blank", 16] # Export nach Excel als Spaltenreihenfolge
+cell_spec = [ 0, 18, 7, 8, 9, 10, 11, 12, "blank", "blank", 16, 17] # Export nach Excel als Spaltenreihenfolge
 

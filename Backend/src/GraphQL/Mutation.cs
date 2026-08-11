@@ -95,8 +95,48 @@ public class Mutation
             };
         }
 
+        var monate = eintraege
+            .Select(e => (e.Datum.Year, e.Datum.Month))
+            .Distinct()
+            .ToList();
+        if (monate.Count != 1)
+        {
+            return new SpeichereZeiteintraegePayload
+            {
+                Ok = false,
+                Error = "Alle Zeiteinträge einer Abgabe müssen denselben Kalendermonat betreffen.",
+            };
+        }
+
+        var (jahr, monat) = monate[0];
         var entities = eintraege.Select(e => e.ToEntity(mitarbeiterId.Value)).ToList();
-        var gespeichert = await repository.AddRangeAsync(entities, cancellationToken);
+
+        var mandanten = entities.Select(e => e.MandantId).Distinct().ToList();
+        if (mandanten.Count != 1)
+        {
+            return new SpeichereZeiteintraegePayload
+            {
+                Ok = false,
+                Error = "Alle Zeiteinträge einer Abgabe müssen denselben Mandanten betreffen.",
+            };
+        }
+
+        var mandantId = mandanten[0];
+
+        var validierungsfehler = ZeiteintragAbgabeValidator.Validiere(entities);
+        if (validierungsfehler is not null)
+        {
+            return new SpeichereZeiteintraegePayload { Ok = false, Error = validierungsfehler };
+        }
+
+        // Nur Einträge dieses Mitarbeiters, Mandanten und Monats ersetzen.
+        var gespeichert = await repository.ReplaceMonatAsync(
+            mitarbeiterId.Value,
+            mandantId,
+            jahr,
+            monat,
+            entities,
+            cancellationToken);
 
         return new SpeichereZeiteintraegePayload { Ok = true, Eintraege = gespeichert };
     }

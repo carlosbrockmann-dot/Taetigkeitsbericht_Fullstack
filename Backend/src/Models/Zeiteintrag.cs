@@ -5,7 +5,9 @@ using HotChocolate;
 namespace Taetigkeitsbericht.Backend.Models;
 
 /// <summary>
-/// Zeiteintrag analog zur Desktop-Entität, ergänzt um Mitarbeiter-ID.
+/// Zeiteintrag analog zur Desktop-Erfassung, ergänzt um Mitarbeiter-ID und Kategorie
+/// (Arbeitstag, Urlaub, Krankheit, Abwesenheit usw.). Uhrzeiten/Pausen sind optional,
+/// damit Abwesenheitstage ohne Arbeitszeiten speicherbar sind.
 /// </summary>
 public class Zeiteintrag
 {
@@ -22,9 +24,12 @@ public class Zeiteintrag
 
     public DateOnly Datum { get; set; }
 
-    public TimeOnly UhrzeitVon { get; set; }
+    /// <summary>Arbeitstag, Urlaub, Krankheit, Abwesenheit, Sonderurlaub, …</summary>
+    public ZeiteintragKategorie Kategorie { get; set; } = ZeiteintragKategorie.Arbeitstag;
 
-    public TimeOnly UhrzeitBis { get; set; }
+    public TimeOnly? UhrzeitVon { get; set; }
+
+    public TimeOnly? UhrzeitBis { get; set; }
 
     public TimeOnly? PauseBeginn { get; set; }
 
