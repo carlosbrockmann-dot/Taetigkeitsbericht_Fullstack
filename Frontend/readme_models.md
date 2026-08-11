@@ -105,6 +105,6 @@ Erweitert `Zeiteintrag` um berechnete Felder; nicht in der Datenbank gespeichert
 | ist_feiertag                  | bool       | Tag ist ein Feiertag                                                  |
 | ist_ferien                    | bool       | Tag liegt in Schulferien                                              |
 | ist_betriebsferien            | bool       | Tag liegt in Betriebsferien                                           |
+| kategorie                     | String     | leer / `U` / `K`; nur Mo–Fr mit Vertrags-Soll (Anzeige)               |
 | feiertagsname                 | String(80) | Name des Feiertags (falls vorhanden)                                  |
 | schulferienname               | String(80) | Name der Schulferien (falls vorhanden)                                |
-| info                          | String(100)| Stundenplan-Kommentar (nur Anzeige, nicht persistiert)                |

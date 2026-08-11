@@ -1,6 +1,6 @@
 # Hilfe: Stundenplan
 
-Der **Stundenplan** ist die **Wochenvorlage** für Ihre Arbeitszeiten (mehrere Blöcke pro Wochentag möglich). Aus ihm können Sie im Reiter **Zeiteinträge** per **Doppelklick auf das Datum** Zeiten in eine Zeile **übernehmen** (passender Wochentag und n-te Zeile am Tag).
+Der **Stundenplan** ist die **Wochenvorlage** für Ihre Arbeitszeiten (mehrere Blöcke pro Wochentag möglich). Aus ihm können Sie im Reiter **Zeiteinträge** per **Doppelklick auf das Datum** Zeiten und ggf. den **Kommentar** in eine Zeile **übernehmen** (passender Wochentag und n-te Zeile am Tag).
 
 ---
 
@@ -26,7 +26,7 @@ Der Stundenplan gilt **wiederkehrend pro Woche** und wird **für alle Wochentage
 - **Arbeitsphase**: **Von** und **Bis** (Arbeitsbeginn und -ende), üblicherweise im Format **HH:MM**.
 - **Pause** und **Pause 2**: jeweils **Von** und **Bis** – optional; Pausen werden bei der **Soll**-Anzeige berücksichtigt.
 - **Soll**: **berechnete** Netto-Arbeitszeit der Zeile (nur Anzeige).
-- **Kommentar**: kurzer Freitext pro Zeile.
+- **Kommentar**: kurzer Freitext pro Zeile (wird in den Zeiteinträgen beim Doppelklick bzw. optional bei Urlaub/Krankheit ohne Von übernommen, wenn dort der Kommentar noch leer ist).
 
 Sie können Zellen **direkt bearbeiten**; bei Zeitfeldern genügt oft die **Stundeneingabe** (z. B. `8`), die Anwendung kann sie in ein Uhrzeitformat umsetzen.
 

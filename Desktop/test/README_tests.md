@@ -101,8 +101,8 @@ Kurzfabriken für wiederkehrende Domain-Objekte (`zeiteintrag`, `zeiteintrags_dt
 | Datei | Inhalt |
 |--------|--------|
 | `test_zeiteintrag_anwendung.py` | Stundenplan ↔ Wochentag beim Erfassen |
-| `test_zeiteintrag_dto_kommentar.py` | Urlaub/Krank (Kürzel/Präfix), Ü-Frei, Feiertagsname, Wochenende |
-| `test_zeiteintrag_dto_geleistet.py` | Netto-Arbeitszeit, Soll-Parsing, Urlaub-Geleistet, `liste_im_monat` |
+| `test_zeiteintrag_dto_kommentar.py` | Kategorie U/K, Ü-Frei, Feiertagsname, optional Kommentar aus Stundenplan bei U/K ohne Von |
+| `test_zeiteintrag_dto_geleistet.py` | Netto-Arbeitszeit, Soll-Parsing, Urlaub-Geleistet über Kategorie, `liste_im_monat` |
 
 **Typ:** Unit-Tests mit `dto_anwendung()` aus `support/fakes.py`.  
 **Fixture:** `dto_app` in `conftest.py`.
@@ -122,6 +122,7 @@ Kurzfabriken für wiederkehrende Domain-Objekte (`zeiteintrag`, `zeiteintrags_dt
 |--------|--------|
 | `test_arbeitszeit_berechnung.py` | `parse_uhrzeit_minuten`, `netto_arbeitsminuten`, … |
 | `test_zeiteintrag_excel_clipboard.py` | Excel-Serialzahlen, TSV, SpreadsheetML `ss:Index` für blank-Spalten |
+| `test_zeiteintrag_monatsabgabe.py` | Filter/Normalisierung der Abgabe-Liste (Arbeit vs. U/K, Mandant) |
 
 **Typ:** Unit-Tests **ohne** `QApplication` – nur reine Funktionen.
 

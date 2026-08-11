@@ -1,8 +1,8 @@
 # Sollstunden in der Zeiterfassung
 
-Die Sollwerte, Tages-Flags (Urlaub, Feiertag, …) und Kommentarregeln werden in der Anwendungsschicht (`ZeiteintragAnwendungDTO` in `src/Core/Application/zeiteintrag_dto_anwendung.py`) berechnet und als `ZeiteintragsDTO` an die Desktop-Tabelle übergeben. Die GUI mappt DTOs auf Tabellenzeilen und zeigt sie an; bei Datumsänderungen ruft das ViewModel `anreichere_eintraege_fuer_tag` erneut auf.
+Die Sollwerte, Tages-Flags (Urlaub, Feiertag, …), **Kategorie** und Kommentarregeln werden in der Anwendungsschicht (`ZeiteintragAnwendungDTO` in `src/Core/Application/zeiteintrag_dto_anwendung.py`) berechnet und als `ZeiteintragsDTO` an die Desktop-Tabelle übergeben. Die GUI mappt DTOs auf Tabellenzeilen und zeigt sie an; bei Datumsänderungen ruft das ViewModel `anreichere_eintraege_fuer_tag` erneut auf.
 
-**Tabellenlayout (Zeiteinträge):** Direkt nach Datum stehen fünf schmale Kennzeichen-Spalten (Feiertag, Urlaub, Krank, Schulferien, Betriebsferien) mit Icons statt Häkchen; danach Von/Bis/Pausen, Geleistet, Soll, Vertrag und Kommentar. Spaltenindices und Excel-Export (`cell_spec`) sind in `src/config.toml` dokumentiert.
+**Tabellenlayout (Zeiteinträge):** Nach Datum fünf Kennzeichen-Spalten (Feiertag, Urlaub, Krank, Schulferien, Betriebsferien) mit Icons; danach Von/Bis/Pausen, Geleistet, Soll, Vertrag, **Kat.**, Kommentar. Ausgeblendete Hilfsspalten (Kalendertag/Feiertagsname/Schulferienname) dienen dem Excel-Export. Spaltenindices und `cell_spec` sind in `src/config.toml` dokumentiert (Indizes 0–20).
 
 ## Sollstunden nach Vertrag
 
@@ -12,11 +12,21 @@ Die Sollwerte, Tages-Flags (Urlaub, Feiertag, …) und Kommentarregeln werden in
 - **Feiertage:** Steuert `[sollstunden].sollstunden_an_feiertagen`. Ist der Wert `false` (Standard), entfällt das Vertrags-Soll an Feiertagen; ist er `true`, gilt wie an einem normalen Tag nur der Wochentag aus `wochenstunden`.
 - **Urlaub- und Krankheitstage:** Entscheidend ist die Spalte **Kategorie** (`U`/`K`, nur an Mo–Fr mit Vertrags-Soll) – nicht der Kommentartext. Stundenplan-Soll entfällt ohne Arbeitszeit. In Zeile 1 je Tag werden Vertrags-Soll und **geleistete Stunden** gesetzt (gleich Vertrags-Soll bzw. Vertrag + Arbeitszeit). Doppelklick zum Übernehmen aus dem Stundenplan bleibt möglich.
 
-**Kommentar** (`_wende_kommentar_regeln_an`, aus `[sollstunden]` in der Config):
-- **U/K** stehen nur in der Spalte **Kategorie** (Mo–Fr mit positivem Vertrags-Soll; Krank vor Urlaub), nicht mehr im Kommentar.
-- Optional (`beim_urlaub_krank_modus_kommentar_aus_Stundenplan`): bei Kat. U/K, leerem **Von** und leerem Kommentar die Anmerkung aus dem Stundenplan übernehmen.
-- An **Feiertagen** nur Feiertagsname im leeren Kommentar.
+## Kategorie (Spalte Kat.)
+
+- Leer = Arbeitstag; **`U`** = Urlaub; **`K`** = Krankheit (Krank vor Urlaub).
+- Nur an **Mo–Fr mit positivem Vertrags-Soll**; Wochenende und Feiertage ohne Kategorie-Kürzel.
+- Steuert Geleistet/Soll an U/K-Tagen; erscheint nicht mehr automatisch im Kommentar.
+
+## Kommentar
+
+Logik in `_wende_kommentar_regeln_an` und `_setze_kommentar_aus_stundenplan_bei_urlaub_krank` (`[sollstunden]` in `config.toml`):
+
+- **Kein Auto-U/K** im Kommentar – dafür ist die Spalte **Kat.** zuständig.
 - **Überstunden frei** (`kommentar_ueberstunden_frei`), wenn Von = Bis.
+- An **Feiertagen** nur Feiertagsname, wenn der Kommentar noch leer ist.
+- Optional **`beim_urlaub_krank_modus_kommentar_aus_Stundenplan`**: bei Kat. U/K, leerem **Von** und leerem Kommentar die Anmerkung des passenden Stundenplan-Blocks übernehmen; bei `false` keine Änderung.
+- **Doppelklick auf Datum** (GUI): Kommentar aus Stundenplan-Anmerkung, wenn das Feld leer ist oder **genau ein Zeichen** hat (Werktag, kein Feiertag) – unabhängig von der Config-Option oben.
 
 ## Sollstunden nach Stundenplan
 

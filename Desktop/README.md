@@ -37,11 +37,19 @@ Domain-Modelle (Felder, Validierung, DTO): siehe [readme_models.md](./readme_mod
 
 ## Sollstunden in der Zeiterfassung
 
-Beschreibung der Sollstunden-Berechnung (nach Vertrag und nach Stundenplan), Kommentarregeln und Tages-Flags: siehe [readme_sollstunden.md](./readme_sollstunden.md).
+Beschreibung der Sollstunden-Berechnung (nach Vertrag und nach Stundenplan), Kategorie U/K, Kommentarregeln und Tages-Flags: siehe [readme_sollstunden.md](./readme_sollstunden.md).
 
 ## Desktop-Frontend
 
-Diese Anwendung soll eine plattformübergreifendes Desktop-Frontend ergeben, das die Zeitaufschreibung in eine SQLite-Datenbank speichert. Die Auswahl der Spalten, die nach Excel exportiert werden sollen, ist in einer zentralen Config-Datei einstellbar (config.toml). 
+Diese Anwendung soll eine plattformübergreifendes Desktop-Frontend ergeben, das die Zeitaufschreibung in eine SQLite-Datenbank speichert. Die Auswahl der Spalten, die nach Excel exportiert werden sollen, ist in einer zentralen Config-Datei einstellbar (`src/config.toml`).
+
+**Zeiteinträge (Kurzüberblick):**
+- Spalten u. a. Kennzeichen (F/U/K/Sf/Bf), Von/Bis/Pausen, Geleistet, Soll, Vertrag, **Kat.** (leer/`U`/`K`), Kommentar; Export-Hilfsspalten können ausgeblendet sein.
+- **Doppelklick auf Datum:** Zeiten aus dem Stundenplan; Kommentar aus der Stundenplan-Anmerkung, wenn leer oder genau ein Zeichen (Werktag, kein Feiertag).
+- **Urlaub/Krankheit ohne Von:** optional Kommentar aus Stundenplan (`beim_urlaub_krank_modus_kommentar_aus_Stundenplan` in `config.toml`).
+- **Abgeben:** Monat an das Backend (siehe unten); **Für Excel kopieren:** Zwischenablage laut `cell_spec`.
+
+Hilfe im Programm: Reiter Zeiteinträge → siehe auch `src/External/Presentation/Desktop/hilfe/zeiteintraege.md`.
 
 ## Geplanter Server-Upload (siehe Repository-Root)
 

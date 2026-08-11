@@ -34,8 +34,8 @@ Dieses Fenster dient der **monatlichen Erfassung** Ihrer Arbeitszeiten. Die Tabe
 - **Zwei Pausenpaare** (je **Von** / **Bis**): Optional. Wenn Sie eine Pause erfassen, tragen Sie **Beginn und Ende** ein; einzelne halbe Paare sind nicht vorgesehen. Die Pausen werden bei der Berechnung der geleisteten Zeit abgezogen.
 - **Geleistet**: Die **errechnete** Netto-Arbeitszeit aus Von/Bis minus Pausen (nur Anzeige, keine direkte Eingabe).
 - **Soll** und **Vertrag**: Anzeige der **Sollzeiten** nach Stundenplan bzw. nach vertraglicher Vorgabe (abhängig von Kalendertag und Konfiguration). Details variieren je nach Tag (z. B. Feiertag, Urlaub).
-- **Kategorie**: Kurzzeichen — leer bei Arbeitstag, **U** bei Urlaub, **K** bei Krankheit; nur an **Mo–Fr mit Vertrags-Soll**, nur Anzeige.
-- **Kommentar**: Freitext (begrenzte Länge), z. B. Tätigkeit oder Hinweise. Automatisch nur bei Überstunden-frei bzw. Feiertagsname (nicht mehr U/K).
+- **Kategorie**: Kurzzeichen — leer bei Arbeitstag, **U** bei Urlaub, **K** bei Krankheit; nur an **Mo–Fr mit Vertrags-Soll**, nur Anzeige (nicht im Kommentar).
+- **Kommentar**: Freitext (begrenzte Länge), z. B. Tätigkeit. Automatisch nur bei Überstunden-frei bzw. Feiertagsname. Bei Urlaub/Krankheit ohne Arbeitsbeginn (**Von** leer) und leerem Kommentar kann – je nach Einstellung in `config.toml` (`beim_urlaub_krank_modus_kommentar_aus_Stundenplan`) – die Anmerkung aus dem Stundenplan übernommen werden.
 - **Tag** (zweite Spalte mit diesem Namen), **Feiertagsname**, **Schulferienname**: Zusatzinformationen, teils für den Export nach Excel; Feiertags- und Feriennamen werden aus der Anwendungsschicht übernommen (nicht gespeichert).
 
 Zeilen mit **roter Schrift** sind **noch nicht gespeichert** oder weichen vom zuletzt geladenen Stand ab.
