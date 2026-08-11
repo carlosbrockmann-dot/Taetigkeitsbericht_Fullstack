@@ -76,9 +76,9 @@ app.MapControllers();
 
 app.MapGraphQL("/graphql").WithOptions(o =>
 {
-    o.Tool.Enable = true;
+    o.Tool.Enable = false; // Banana Cake Pop deaktiviert
 });
 
-app.MapGet("/", () => Results.Redirect("/graphql"));
+app.MapGet("/", () => "Taetigkeitsbericht.Backend");
 
 app.Run();

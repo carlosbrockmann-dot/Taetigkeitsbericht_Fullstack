@@ -92,16 +92,4 @@ Aufgaben und Reihenfolge: **[../Planung.md](../Planung.md)** (Phase 1, Phase 4 V
 
 E-Mail-Versand: standardmäßig `LoggingEmailSender` (Link im Log). Für SMTP: `Smtp:Enabled=true` in `appsettings.json`.
 
-### GraphQL / Banana Cake Pop
-
-Nach `dotnet run`: **[http://localhost:5108/graphql](http://localhost:5108/graphql)** bzw. HTTPS-Port aus `launchSettings.json`.
-
-| GraphQL | Entspricht |
-|---------|------------|
-| Mutation `register` | Registrierung + Bestätigungs-E-Mail |
-| Mutation `confirmEmail` | E-Mail bestätigen |
-| Mutation `login` | Login → JWT |
-| Mutation `speichereZeiteintraege` | Zeiteinträge speichern (JWT im HTTP-Header) |
-| Query `zeiteintraege` | Zeiteinträge abfragen (JWT) |
-
-In Banana Cake Pop unter **HTTP Headers** z. B. `Authorization: Bearer <token>` setzen (Token aus `login`).
+GraphQL-Endpoint (ohne Banana Cake Pop): `POST /graphql`. REST-Controller unter `/api/...`.
