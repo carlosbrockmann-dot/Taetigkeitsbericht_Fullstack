@@ -45,9 +45,17 @@ Diese Anwendung soll eine plattformübergreifendes Desktop-Frontend ergeben, das
 
 ## Geplanter Server-Upload (siehe Repository-Root)
 
-Geplant (noch nicht implementiert): Login gegen das Backend, danach Upload der Zeiteinträge als JSON-Liste. Die Verbindung zum Server erfolgt mit **Token im Header** und **privaten Zertifikatsdateien** (TLS/mTLS). Backend und Frontend laufen in AWS in einer VPC; die Datenbank ist nur intern hinter Firewall/Security Groups erreichbar.
+Registrierung und Monats-Abgabe an das Backend sind in der Desktop-UI angebunden:
 
-Details: [../Planung.md](../Planung.md), [../README.md](../README.md) (Backend-Technik nur im Root-README).
+- **Hamburger-Menü** (links oben) → „Am Backend registrieren…“ (modales Formular)
+- Reiter **Zeiteinträge** → Button **„Monat am Backend abgeben“** (Login + GraphQL-Upload)
+- Backend-Fehler erscheinen in der **roten Leiste am unteren Fensterrand**
+
+Konfiguration: `src/authentication.toml` (Vorlage: `authentication.example.toml`) mit `base_url` (z. B. `http://localhost:5108`), Benutzername, Passwort und E-Mail.
+
+Voraussetzungen: Backend läuft; Konto ist registriert und E-Mail bestätigt. TLS/mTLS mit privaten Zertifikaten folgt später.
+
+Details: [../Planung.md](../Planung.md), [../Backend/README.md](../Backend/README.md).
 
 ## Geplanter PDF-Export zum Ausdrucken
 

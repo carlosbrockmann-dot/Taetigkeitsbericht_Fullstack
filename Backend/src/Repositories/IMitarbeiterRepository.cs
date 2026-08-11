@@ -6,6 +6,8 @@ public interface IMitarbeiterRepository
 {
     Task<Mitarbeiter?> GetByBenutzernameAsync(string benutzername, CancellationToken cancellationToken = default);
 
+    Task<Mitarbeiter?> GetByEmailAsync(string email, CancellationToken cancellationToken = default);
+
     Task<Mitarbeiter?> GetByIdAsync(int id, CancellationToken cancellationToken = default);
 
     Task<Mitarbeiter?> GetByEmailBestaetigungsTokenAsync(string token, CancellationToken cancellationToken = default);

@@ -60,6 +60,7 @@ appsettings.*.local.json
 *.p12
 *.key
 *.pem
+logs/
 
 # OS
 .DS_Store

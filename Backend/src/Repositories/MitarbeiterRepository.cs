@@ -19,6 +19,12 @@ public class MitarbeiterRepository : IMitarbeiterRepository
             .FirstOrDefaultAsync(m => m.Benutzername == benutzername, cancellationToken);
     }
 
+    public Task<Mitarbeiter?> GetByEmailAsync(string email, CancellationToken cancellationToken = default)
+    {
+        return _db.Mitarbeiter
+            .FirstOrDefaultAsync(m => m.Email.ToLower() == email.ToLower(), cancellationToken);
+    }
+
     public Task<Mitarbeiter?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
     {
         return _db.Mitarbeiter

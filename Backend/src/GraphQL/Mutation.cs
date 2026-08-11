@@ -11,13 +11,21 @@ public class Mutation
     public async Task<RegisterPayload> RegisterAsync(
         RegisterRequest input,
         [Service] IAuthService authService,
+        [Service] Microsoft.Extensions.Options.IOptions<SmtpEmailOptions> smtpOptions,
         CancellationToken cancellationToken)
     {
-        var (ok, error, mitarbeiter) = await authService.RegisterAsync(input, cancellationToken);
+        var (ok, error, mitarbeiter, confirmationLink) = await authService.RegisterAsync(input, cancellationToken);
         if (!ok || mitarbeiter is null)
         {
             return new RegisterPayload { Ok = false, Error = error };
         }
+
+        var hinweis = smtpOptions.Value.Enabled
+            ? "Bitte Posteingang (und Spam) der registrierten E-Mail prüfen – Bestätigungslink wurde gesendet "
+              + "(auch bei erneuter Registrierung eines noch unbestätigten Kontos)."
+            : confirmationLink is null
+                ? "Bitte E-Mail-Adresse über den Bestätigungslink bestätigen."
+                : "Development: SMTP ist aus – Bestätigungslink unten bzw. logs/last-confirmation-email.txt.";
 
         return new RegisterPayload
         {
@@ -26,7 +34,8 @@ public class Mutation
             Benutzername = mitarbeiter.Benutzername,
             Email = mitarbeiter.Email,
             EmailBestaetigt = mitarbeiter.EmailBestaetigt,
-            Hinweis = "Bitte E-Mail-Adresse über den Bestätigungslink bestätigen.",
+            Hinweis = hinweis,
+            ConfirmationLink = confirmationLink,
         };
     }
 

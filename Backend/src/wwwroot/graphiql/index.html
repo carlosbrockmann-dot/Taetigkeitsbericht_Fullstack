@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GraphiQL – Tätigkeitsbericht Backend</title>
+  <link rel="stylesheet" href="https://unpkg.com/graphiql@3.7.2/graphiql.min.css" />
+  <link rel="stylesheet" href="https://unpkg.com/@graphiql/plugin-explorer@3.2.3/dist/style.css" />
+  <style>
+    html, body { height: 100%; margin: 0; overflow: hidden; }
+    #graphiql { height: 100vh; }
+  </style>
+</head>
+<body>
+  <div id="graphiql">GraphiQL wird geladen…</div>
+  <script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/graphiql@3.7.2/graphiql.min.js"></script>
+  <script src="https://unpkg.com/@graphiql/plugin-explorer@3.2.3/dist/index.umd.js"></script>
+  <script>
+    const fetcher = GraphiQL.createFetcher({
+      url: window.location.origin + "/graphql",
+    });
+    const explorerPlugin = GraphiQLPluginExplorer.explorerPlugin();
+    const defaultQuery = `# Schema-Übersicht: Explorer links (Ordner-Icon) oder Docs.
+# Endpoint: POST /graphql
+
+# mutation Register($input: RegisterRequestInput!) {
+#   register(input: $input) {
+#     ok error mitarbeiterId benutzername email emailBestaetigt hinweis confirmationLink
+#   }
+# }
+
+# mutation Login($input: LoginRequestInput!) {
+#   login(input: $input) { ok error login { token expiresAt mitarbeiterId benutzername } }
+# }
+
+# query Zeiteintraege($von: Date!, $bis: Date!) {
+#   zeiteintraege(von: $von, bis: $bis) { id datum anmerkung }
+# }
+`;
+    ReactDOM.createRoot(document.getElementById("graphiql")).render(
+      React.createElement(GraphiQL, {
+        fetcher,
+        defaultQuery,
+        defaultEditorToolsVisibility: true,
+        plugins: [explorerPlugin],
+        visiblePlugin: explorerPlugin,
+      })
+    );
+  </script>
+</body>
+</html>

@@ -37,4 +37,7 @@ public class Mitarbeiter
 
     [GraphQLIgnore]
     public ICollection<Zeiteintrag> Zeiteintraege { get; set; } = new List<Zeiteintrag>();
+
+    [GraphQLIgnore]
+    public ICollection<LoginToken> LoginTokens { get; set; } = new List<LoginToken>();
 }

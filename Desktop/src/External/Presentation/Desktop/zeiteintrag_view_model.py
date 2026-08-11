@@ -137,6 +137,15 @@ class ZeiteintragViewModel(QObject):
     def set_mandant_id(self, mandant_id: int) -> None:
         self._mandant_id = mandant_id
 
+    def liste_gespeicherte_im_monat(self, jahr: int, monat: int) -> list[Zeiteintrag]:
+        """Persistierte Einträge des Monats (ohne UI-Platzhalter ohne Zeiten)."""
+        mandant_id = self._aktuelle_mandant_id()
+        return [
+            e
+            for e in self._anwendung.liste(mandant_id, jahr=jahr, monat=monat)
+            if e.uhrzeit_von is not None and e.uhrzeit_bis is not None
+        ]
+
     @contextmanager
     def anreicherung_ausgesetzt(self):
         vorher = self._suspend_anreicherung

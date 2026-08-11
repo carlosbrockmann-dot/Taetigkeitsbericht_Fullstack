@@ -25,7 +25,14 @@ from Core.Domain.interfaces.sollstunden_vertrag_repository_interface import ISol
 from Core.Domain.interfaces.stundenplan_repository_interface import IStundenplanRepository
 from Core.Domain.interfaces.urlaubsantrag_repository_interface import IUrlaubsantragRepository
 from Core.Domain.interfaces.zeiteintrag_repository_interface import IZeiteintragRepository
+from Core.Application.backend_anwendung import BackendAnwendung
+from Core.Domain.interfaces.backend_api_interface import IBackendApiClient
 from Core.Domain.services.auth_service import AuthService
+from External.Infrastructure.authentication_settings import (
+    AuthenticationSettings,
+    load_authentication_settings,
+)
+from External.Infrastructure.backend_graphql_client import BackendGraphQlClient
 from Core.Domain.services.betriebsferien_service import BetriebsferienService
 from Core.Domain.services.feiertag_service import FeiertagService
 from Core.Domain.services.guthaben_stunden_service import GuthabenStundenService
@@ -41,6 +48,27 @@ from Core.Domain.services.zeiteintrag_service import ZeiteintragService
 class ApplicationDIModule(Module):
     def configure(self, binder: Binder) -> None:
         binder.bind(IAuthService, to=AuthService)
+
+    @singleton
+    @provider
+    def provide_authentication_settings(self) -> AuthenticationSettings:
+        return load_authentication_settings()
+
+    @singleton
+    @provider
+    def provide_backend_api_client(
+        self, settings: AuthenticationSettings
+    ) -> IBackendApiClient:
+        return BackendGraphQlClient(settings)
+
+    @singleton
+    @provider
+    def provide_backend_anwendung(
+        self,
+        client: IBackendApiClient,
+        settings: AuthenticationSettings,
+    ) -> BackendAnwendung:
+        return BackendAnwendung(client, settings)
 
     @provider
     def provide_zeiteintrag_service(

@@ -1,5 +1,6 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 using Microsoft.IdentityModel.Tokens;
 using Taetigkeitsbericht.Backend.Models;
@@ -15,7 +16,7 @@ public class JwtTokenService : IJwtTokenService
         _configuration = configuration;
     }
 
-    public string CreateToken(Mitarbeiter mitarbeiter)
+    public JwtCreateResult CreateToken(Mitarbeiter mitarbeiter)
     {
         var jwtSection = _configuration.GetSection("Jwt");
         var key = jwtSection["Key"]
@@ -24,9 +25,13 @@ public class JwtTokenService : IJwtTokenService
         var audience = jwtSection["Audience"] ?? "Taetigkeitsbericht";
         var expiresMinutes = int.TryParse(jwtSection["ExpiresMinutes"], out var m) ? m : 60;
 
+        var jti = Guid.NewGuid().ToString("N");
+        var expiresAt = DateTimeOffset.UtcNow.AddMinutes(expiresMinutes);
+
         var claims = new[]
         {
             new Claim(JwtRegisteredClaimNames.Sub, mitarbeiter.Id.ToString()),
+            new Claim(JwtRegisteredClaimNames.Jti, jti),
             new Claim(ClaimTypes.NameIdentifier, mitarbeiter.Id.ToString()),
             new Claim(ClaimTypes.Name, mitarbeiter.Benutzername),
             new Claim(JwtRegisteredClaimNames.UniqueName, mitarbeiter.Benutzername),
@@ -40,9 +45,16 @@ public class JwtTokenService : IJwtTokenService
             issuer: issuer,
             audience: audience,
             claims: claims,
-            expires: DateTime.UtcNow.AddMinutes(expiresMinutes),
+            expires: expiresAt.UtcDateTime,
             signingCredentials: credentials);
 
-        return new JwtSecurityTokenHandler().WriteToken(token);
+        var tokenString = new JwtSecurityTokenHandler().WriteToken(token);
+        return new JwtCreateResult(tokenString, jti, expiresAt, ComputeTokenHash(tokenString));
+    }
+
+    public static string ComputeTokenHash(string token)
+    {
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(token));
+        return Convert.ToHexString(hash);
     }
 }

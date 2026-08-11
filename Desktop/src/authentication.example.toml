@@ -1,0 +1,13 @@
+# Vorlage für Desktop/src/authentication.toml (echte Datei nicht committen, wenn Secrets enthalten).
+
+[authentication]
+username = "mein.benutzer"
+username_password = "MeinPasswort"
+username_email = "mein.benutzer@example.com"
+
+[webapi]
+# Entwicklungs-Backend (HTTP-Profil):
+base_url = "http://localhost:5108"
+token_expires_hours = 24
+# Bei selbstsigniertem HTTPS lokal:
+# verify_ssl = false

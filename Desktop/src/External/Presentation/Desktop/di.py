@@ -3,6 +3,7 @@ from __future__ import annotations
 from injector import Module, provider, singleton
 
 from App.app_config import AppConfig
+from Core.Application.backend_anwendung import BackendAnwendung
 from Core.Application.betriebsferien_anwendung import BetriebsferienAnwendung
 from Core.Application.feiertag_anwendung import FeiertagAnwendung
 from Core.Application.krankmeldung_anwendung import KrankmeldungAnwendung
@@ -147,6 +148,7 @@ class DesktopPresentationDIModule(Module):
         schulferien_view: SchulferienView,
         mandant_auswahl: MandantAuswahl,
         app_config: AppConfig,
+        backend_anwendung: BackendAnwendung,
     ) -> ZeiteintragWindow:
         return ZeiteintragWindow(
             view_model,
@@ -158,6 +160,7 @@ class DesktopPresentationDIModule(Module):
             schulferien_view,
             mandant_auswahl=mandant_auswahl,
             app_config=app_config,
+            backend_anwendung=backend_anwendung,
             excel_export=app_config.zeiteintrag_excel_export,
             ausgeblendete_spalten=app_config.zeiteintrag_ausgeblendete_spalten,
         )

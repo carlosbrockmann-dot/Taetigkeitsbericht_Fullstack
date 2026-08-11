@@ -11,6 +11,7 @@ public class RegisterPayload
     public string? Email { get; init; }
     public bool? EmailBestaetigt { get; init; }
     public string? Hinweis { get; init; }
+    public string? ConfirmationLink { get; init; }
 }
 
 public class LoginPayload

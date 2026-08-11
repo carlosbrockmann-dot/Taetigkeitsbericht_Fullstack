@@ -14,6 +14,8 @@ public class AppDbContext : DbContext
 
     public DbSet<Zeiteintrag> Zeiteintraege => Set<Zeiteintrag>();
 
+    public DbSet<LoginToken> LoginTokens => Set<LoginToken>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -33,6 +35,18 @@ public class AppDbContext : DbContext
             entity.HasOne(z => z.Mitarbeiter)
                 .WithMany(m => m.Zeiteintraege)
                 .HasForeignKey(z => z.MitarbeiterId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<LoginToken>(entity =>
+        {
+            entity.ToTable("login_token");
+            entity.Property(t => t.Id).HasDefaultValueSql("gen_random_uuid()");
+            entity.HasIndex(t => t.Jti).IsUnique();
+            entity.HasIndex(t => new { t.MitarbeiterId, t.WiderrufenAm });
+            entity.HasOne(t => t.Mitarbeiter)
+                .WithMany(m => m.LoginTokens)
+                .HasForeignKey(t => t.MitarbeiterId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }

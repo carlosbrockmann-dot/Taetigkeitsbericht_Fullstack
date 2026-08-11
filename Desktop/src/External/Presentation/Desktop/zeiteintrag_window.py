@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMainWindow,
+    QMenu,
     QPushButton,
     QScrollArea,
     QSizePolicy,
@@ -37,6 +38,7 @@ from PySide6.QtWidgets import (
     QStyleOptionViewItem,
     QTableView,
     QTabWidget,
+    QToolButton,
     QToolTip,
     QVBoxLayout,
     QWidget,
@@ -48,6 +50,8 @@ from App.app_config import (
     ZeiteintragExcelExportSettings,
     load_zeiteintrag_excel_export_settings,
 )
+from Core.Application.backend_anwendung import BackendAnwendung
+from External.Infrastructure.backend_graphql_client import BackendApiError
 from External.Presentation.Desktop.mandant_auswahl import MandantAuswahl
 from External.Presentation.Desktop.betriebsferien_view import BetriebsferienView
 from External.Presentation.Desktop.zeiteintrag_excel_clipboard import (
@@ -76,6 +80,7 @@ from External.Presentation.Desktop.hilfe import (
     schliesse_gemeinsame_markdown_hilfe,
 )
 from External.Presentation.Desktop.message_boxes import frage_ja_nein, warnung
+from External.Presentation.Desktop.registrierung_dialog import RegistrierungDialog
 from External.Presentation.Desktop.urlaubsantrag_view import UrlaubsantragView
 from External.Presentation.Desktop.zeiteintrag_formular import ZeiteintragFormularMonatsFuss
 from External.Presentation.Desktop.zeiteintrag_table_model import (
@@ -371,11 +376,13 @@ class ZeiteintragWindow(QMainWindow):
         schulferien_view: SchulferienView,
         mandant_auswahl: MandantAuswahl,
         app_config: AppConfig,
+        backend_anwendung: BackendAnwendung | None = None,
         excel_export: ZeiteintragExcelExportSettings | None = None,
         ausgeblendete_spalten: Sequence[int] | None = None,
     ) -> None:
         super().__init__()
         self._app_config = app_config
+        self._backend_anwendung = backend_anwendung
         self._mandant_auswahl = mandant_auswahl
         self._view_model = view_model
         self._stundenplan_view = stundenplan_view
@@ -631,6 +638,12 @@ class ZeiteintragWindow(QMainWindow):
         self._zeile_hinzufuegen_button = QPushButton("Zeile hinzufügen", self)
         self._zeile_loeschen_button = QPushButton("Markierte Zeile(n) löschen", self)
         self._speichern_button = QPushButton("Alle Zeilen speichern", self)
+        self._monat_abgeben_button = QPushButton("Monat am Backend abgeben", self)
+        self._monat_abgeben_button.setToolTip(
+            "Meldet sich mit den Zugangsdaten aus authentication.toml am Backend an "
+            "und lädt die Zeiteinträge des angezeigten Monats hoch."
+        )
+        self._monat_abgeben_button.setEnabled(self._backend_anwendung is not None)
         self._status_label = QLabel("Bereit.", self)
         self._status_label.setSizePolicy(
             QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
@@ -671,6 +684,7 @@ class ZeiteintragWindow(QMainWindow):
         toolbar_layout.addWidget(self._zeile_hinzufuegen_button)
         toolbar_layout.addWidget(self._zeile_loeschen_button)
         toolbar_layout.addWidget(self._speichern_button)
+        toolbar_layout.addWidget(self._monat_abgeben_button)
 
         self._table = QTableView(self)
         self._table.setModel(self._view_model.table_model)
@@ -806,6 +820,30 @@ class ZeiteintragWindow(QMainWindow):
         mandant_zeile_layout = QHBoxLayout(mandant_zeile)
         mandant_zeile_layout.setContentsMargins(0, 0, 0, 0)
         mandant_zeile_layout.setSpacing(0)
+
+        self._hamburger_button = QToolButton(mandant_zeile)
+        self._hamburger_button.setText("☰")
+        self._hamburger_button.setToolTip("Menü")
+        self._hamburger_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self._hamburger_button.setStyleSheet(
+            "QToolButton {"
+            " font-size: 18px;"
+            " padding: 2px 8px;"
+            " border: 1px solid #9e9e9e;"
+            " border-radius: 4px;"
+            " background: #f5f5f5;"
+            "}"
+            "QToolButton::menu-indicator { image: none; width: 0; }"
+        )
+        hamburger_menu = QMenu(self._hamburger_button)
+        registrieren_action = hamburger_menu.addAction("Am Backend registrieren…")
+        registrieren_action.triggered.connect(self._on_registrierung_oeffnen)
+        registrieren_action.setEnabled(self._backend_anwendung is not None)
+        self._hamburger_button.setMenu(hamburger_menu)
+        mandant_zeile_layout.addWidget(
+            self._hamburger_button,
+            alignment=Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
+        )
         mandant_zeile_layout.addStretch(1)
         mandant_zeile_layout.addWidget(
             self._container_gruppe,
@@ -817,6 +855,25 @@ class ZeiteintragWindow(QMainWindow):
         kopfzeile_stack.addWidget(mandant_zeile)
         central_layout.addWidget(kopfzeile)
         central_layout.addWidget(self._tab_widget, 1)
+
+        self._backend_fehler_label = QLabel("", central)
+        self._backend_fehler_label.setWordWrap(True)
+        self._backend_fehler_label.setAlignment(
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+        )
+        self._backend_fehler_label.setStyleSheet(
+            "QLabel {"
+            " color: #b71c1c;"
+            " background-color: #ffebee;"
+            " border-top: 1px solid #ef9a9a;"
+            " padding: 6px 10px;"
+            "}"
+        )
+        self._backend_fehler_label.setVisible(False)
+        self._backend_fehler_label.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum
+        )
+        central_layout.addWidget(self._backend_fehler_label)
         self.setCentralWidget(central)
 
         self._tab_widget.tabBar().installEventFilter(self)
@@ -827,6 +884,7 @@ class ZeiteintragWindow(QMainWindow):
         self._zeile_hinzufuegen_button.clicked.connect(self._on_zeile_hinzufuegen)
         self._zeile_loeschen_button.clicked.connect(self._on_zeile_loeschen)
         self._speichern_button.clicked.connect(self._on_speichern)
+        self._monat_abgeben_button.clicked.connect(self._on_monat_am_backend_abgeben)
         self._table.doubleClicked.connect(self._on_table_double_clicked)
         self._jahr_spin.valueChanged.connect(self._on_period_changed)
         self._monat_combo.currentIndexChanged.connect(self._on_period_changed)
@@ -1202,6 +1260,64 @@ class ZeiteintragWindow(QMainWindow):
             return
         self._view_model.remove_rows(row_indices)
         selection_model.clearSelection()
+
+    def _zeige_backend_fehler(self, text: str) -> None:
+        self._backend_fehler_label.setText(text.strip())
+        self._backend_fehler_label.setVisible(bool(text.strip()))
+
+    def _loesche_backend_fehler(self) -> None:
+        self._backend_fehler_label.clear()
+        self._backend_fehler_label.setVisible(False)
+
+    def _on_registrierung_oeffnen(self) -> None:
+        self._loesche_backend_fehler()
+        if self._backend_anwendung is None:
+            self._zeige_backend_fehler("Backend-Anbindung ist nicht konfiguriert.")
+            return
+        dialog = RegistrierungDialog(self._backend_anwendung, parent=self)
+        dialog.exec()
+
+    def _on_monat_am_backend_abgeben(self) -> None:
+        self._loesche_backend_fehler()
+        if self._backend_anwendung is None:
+            self._zeige_backend_fehler("Backend-Anbindung ist nicht konfiguriert.")
+            return
+
+        if self._has_unsaved_changes:
+            if not frage_ja_nein(
+                self,
+                "Ungespeicherte Änderungen",
+                "Es gibt ungespeicherte Änderungen. Trotzdem die gespeicherten "
+                "Datenbank-Einträge des Monats abgeben?",
+            ):
+                return
+
+        jahr, monat = self._selected_period()
+        eintraege = self._view_model.liste_gespeicherte_im_monat(jahr, monat)
+        if not eintraege:
+            self._zeige_backend_fehler(
+                f"Keine gespeicherten Zeiteinträge für {monat:02d}/{jahr} zum Abgeben."
+            )
+            return
+
+        try:
+            result = self._backend_anwendung.lade_monat_hoch(eintraege)
+        except BackendApiError as exc:
+            self._zeige_backend_fehler(str(exc))
+            return
+        except Exception as exc:  # noqa: BLE001
+            self._zeige_backend_fehler(f"Unerwarteter Fehler: {exc}")
+            return
+
+        if not result.ok:
+            self._zeige_backend_fehler(result.error or "Abgabe am Backend fehlgeschlagen.")
+            return
+
+        self._loesche_backend_fehler()
+        self._set_status(
+            f"{result.anzahl} Zeiteintrag/Zeiteinträge für {monat:02d}/{jahr} "
+            "am Backend abgegeben."
+        )
 
     def _on_speichern(self) -> None:
         if not self._view_model.speichere_alle():
