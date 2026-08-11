@@ -127,7 +127,7 @@ Wenn `Smtp.Enabled=False` oder Zugangsdaten fehlen, wird **keine** echte Mail ge
 | `POST /graphql` → `login` | nein | Login → JWT (nur nach E-Mail-Bestätigung) |
 | `POST /graphql` → `confirmEmail` | nein | E-Mail bestätigen (alternative zur GET-URL) |
 | `POST /graphql` → `speichereZeiteintraege` | JWT | Monat abgeben: vorhandene Einträge **nur für diesen Mitarbeiter, Mandanten und Monat** ersetzen, dann neu speichern. Alle Einträge der Abgabe müssen denselben Mandanten haben. Pro Datum+Mandant: mehrere **Arbeitstage** mit unterschiedlichen Uhrzeiten; **Urlaub/Krankheit** höchstens einmal (nicht gemischt mit Arbeit am selben Tag). |
-| `POST /graphql` → Query `zeiteintraege` | JWT | Eigene Zeiteinträge (`von` / `bis` optional) |
+| `POST /graphql` → Query `zeiteintraege` | JWT | Eigene Zeiteinträge (`von` / `bis` / optional `mandantId`) |
 | `GET /api/auth/confirm-email?token=` | nein | Bestätigungslink aus der Mail (Browser) |
 | `GET /graphql?sdl` | nein | Schema als SDL (Hot Chocolate `EnableSchemaRequests`) |
 | `GET /graphiql` | nein | GraphiQL (**nur Development**) |
@@ -146,6 +146,10 @@ In Development liefert `register` zusätzlich `confirmationLink` in der Antwort 
 Der Bestätigungslink wird bei jeder Registrierung / erneutem Versand zudem im **Konsolen-Log** ausgegeben (`E-Mail-Bestätigungslink für …`).
 
 Tabelle `login_token`: `Id`, `MitarbeiterId`, `Jti`, `TokenHash` (SHA-256, kein Klartext-JWT), `ErstelltAm`, `LaeuftAbAm`, `WiderrufenAm`.
+
+### CORS (Frontend)
+
+In `appsettings.json` unter `Cors:Origins` (Standard: `http://localhost:5173`, `http://127.0.0.1:5173`). Policy `Frontend` in `Program.cs` – nötig für die React-Online-Ansicht.
 
 ### Modell `Zeiteintrag`
 

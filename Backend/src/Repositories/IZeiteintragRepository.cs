@@ -24,5 +24,6 @@ public interface IZeiteintragRepository
         int mitarbeiterId,
         DateOnly? von,
         DateOnly? bis,
+        int? mandantId = null,
         CancellationToken cancellationToken = default);
 }

@@ -54,11 +54,17 @@ public class ZeiteintragRepository : IZeiteintragRepository
         int mitarbeiterId,
         DateOnly? von,
         DateOnly? bis,
+        int? mandantId = null,
         CancellationToken cancellationToken = default)
     {
         var query = _db.Zeiteintraege
             .AsNoTracking()
             .Where(z => z.MitarbeiterId == mitarbeiterId);
+
+        if (mandantId is not null)
+        {
+            query = query.Where(z => z.MandantId == mandantId);
+        }
 
         if (von is not null)
         {

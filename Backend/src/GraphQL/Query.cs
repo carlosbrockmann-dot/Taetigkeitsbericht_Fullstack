@@ -13,6 +13,7 @@ public class Query
     public async Task<IReadOnlyList<Zeiteintrag>> ZeiteintraegeAsync(
         DateOnly? von,
         DateOnly? bis,
+        int? mandantId,
         [Service] IZeiteintragRepository repository,
         [Service] ICurrentUserService currentUser,
         [Service] IHttpContextAccessor httpContextAccessor,
@@ -28,6 +29,7 @@ public class Query
             mitarbeiterId,
             von,
             bis,
+            mandantId,
             cancellationToken);
     }
 }

@@ -11,6 +11,7 @@ class AuthenticationSettings:
     password: str
     email: str
     base_url: str
+    frontend_url: str = "http://localhost:5173"
     token_expires_hours: int = 24
     verify_ssl: bool = True
 
@@ -35,11 +36,13 @@ def load_authentication_settings(
     auth = raw.get("authentication", {})
     webapi = raw.get("webapi", {})
     base_url = str(webapi.get("base_url", "http://localhost:5108")).rstrip("/")
+    frontend_url = str(webapi.get("frontend_url", "http://localhost:5173")).rstrip("/")
     return AuthenticationSettings(
         username=str(auth.get("username", "")).strip(),
         password=str(auth.get("username_password", "")),
         email=str(auth.get("username_email", "")).strip(),
         base_url=base_url,
+        frontend_url=frontend_url,
         token_expires_hours=int(webapi.get("token_expires_hours", 24)),
         verify_ssl=bool(webapi.get("verify_ssl", True)),
     )

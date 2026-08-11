@@ -57,13 +57,14 @@ Registrierung und Monats-Abgabe an das Backend sind in der Desktop-UI angebunden
 
 - **Hamburger-Menü** (links oben) → „Am Backend registrieren…“ (modales Formular)
 - Reiter **Zeiteinträge** → Button **„Abgeben“** (rechts neben „Für Excel kopieren“; Login + GraphQL-Upload)
+- Reiter **Zeiteinträge** → Button **„Online ansehen“** (Login falls nötig, öffnet React-Frontend mit JWT, Monat und Mandant)
 - Backend-Fehler erscheinen in der **roten Leiste am unteren Fensterrand**
 
-Konfiguration: `src/authentication.toml` (Vorlage: `authentication.example.toml`) mit `base_url` (HTTP `http://localhost:5108` oder HTTPS `https://localhost:7022`), Benutzername, Passwort und E-Mail. Bei lokalem HTTPS: Dev-Zertifikat vertrauen (`dotnet dev-certs https --trust`) oder `verify_ssl = false`.
+Konfiguration: `src/authentication.toml` (Vorlage: `authentication.example.toml`) mit `base_url` (HTTP `http://localhost:5108` oder HTTPS `https://localhost:7022`), `frontend_url` (React, Standard `http://localhost:5173`), Benutzername, Passwort und E-Mail. Bei lokalem HTTPS: Dev-Zertifikat vertrauen (`dotnet dev-certs https --trust`) oder `verify_ssl = false`.
 
-Voraussetzungen: Backend läuft; Konto ist registriert und E-Mail bestätigt.
+Voraussetzungen: Backend läuft; für Online-Ansicht zusätzlich Frontend (`cd Frontend && npm run dev`); Konto ist registriert und E-Mail bestätigt.
 
-Details: [../Planung.md](../Planung.md), [../Backend/README.md](../Backend/README.md).
+Details: [../Planung.md](../Planung.md), [../Backend/README.md](../Backend/README.md), [../Frontend/README.md](../Frontend/README.md).
 
 ## Geplanter PDF-Export zum Ausdrucken
 

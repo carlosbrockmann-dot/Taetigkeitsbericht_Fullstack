@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import date, datetime
+from urllib.parse import quote, urlencode
 from uuid import UUID
 
-from PySide6.QtCore import QEvent, QMimeData, QModelIndex, QPersistentModelIndex, QRect, QSize, Qt, QTimer
+from PySide6.QtCore import QEvent, QMimeData, QModelIndex, QPersistentModelIndex, QRect, QSize, Qt, QTimer, QUrl
 from PySide6.QtGui import (
     QCloseEvent,
     QColor,
+    QDesktopServices,
     QGuiApplication,
     QIcon,
     QKeySequence,
@@ -633,6 +635,11 @@ class ZeiteintragWindow(QMainWindow):
         self._monat_abgeben_button.setToolTip("Übers Internet abgeben.")
         self._monat_abgeben_button.setStyleSheet("color: red;")
         self._monat_abgeben_button.setEnabled(self._backend_anwendung is not None)
+        self._online_ansehen_button = QPushButton("Online ansehen", self)
+        self._online_ansehen_button.setToolTip(
+            "Öffnet die React-Online-Ansicht im Browser (Login am Backend, aktueller Monat/Mandant)."
+        )
+        self._online_ansehen_button.setEnabled(self._backend_anwendung is not None)
         self._loesch_hinweis_label = QLabel(self)
         self._loesch_hinweis_label.setStyleSheet("color: red;")
         self._loesch_hinweis_label.setAlignment(
@@ -677,6 +684,7 @@ class ZeiteintragWindow(QMainWindow):
         toolbar_layout.addWidget(self._monat_combo)
         toolbar_layout.addWidget(self._excel_kopieren_button)
         toolbar_layout.addWidget(self._monat_abgeben_button)
+        toolbar_layout.addWidget(self._online_ansehen_button)
         toolbar_layout.addStretch(1)
         toolbar_layout.addWidget(self._loesch_hinweis_label)
         toolbar_layout.addStretch(1)
@@ -884,6 +892,7 @@ class ZeiteintragWindow(QMainWindow):
         self._zeile_loeschen_button.clicked.connect(self._on_zeile_loeschen)
         self._speichern_button.clicked.connect(self._on_speichern)
         self._monat_abgeben_button.clicked.connect(self._on_monat_am_backend_abgeben)
+        self._online_ansehen_button.clicked.connect(self._on_online_ansehen)
         self._table.doubleClicked.connect(self._on_table_double_clicked)
         self._jahr_spin.valueChanged.connect(self._on_period_changed)
         self._monat_combo.currentIndexChanged.connect(self._on_period_changed)
@@ -1319,6 +1328,46 @@ class ZeiteintragWindow(QMainWindow):
         self._set_status_text(
             f"{result.anzahl} Zeiteintrag/Zeiteinträge für {monat:02d}/{jahr} "
             "am Backend abgegeben."
+        )
+
+    def _on_online_ansehen(self) -> None:
+        self._loesche_backend_fehler()
+        if self._backend_anwendung is None:
+            self._zeige_backend_fehler("Backend-Anbindung ist nicht konfiguriert.")
+            return
+
+        jahr, monat = self._selected_period()
+        mandant_id = self._mandant_auswahl.mandant_id
+        try:
+            login = self._backend_anwendung.stelle_sicher_angemeldet()
+        except Exception as exc:  # noqa: BLE001
+            self._zeige_backend_fehler(f"Login fehlgeschlagen: {exc}")
+            return
+
+        if not login.ok or not login.token:
+            self._zeige_backend_fehler(
+                login.error or "Anmeldung am Backend fehlgeschlagen."
+            )
+            return
+
+        frontend_url = self._backend_anwendung.settings.frontend_url.rstrip("/")
+        query = urlencode(
+            {
+                "jahr": jahr,
+                "monat": monat,
+                "mandantId": mandant_id,
+            }
+        )
+        url = f"{frontend_url}/?{query}#token={quote(login.token, safe='')}"
+        if not QDesktopServices.openUrl(QUrl(url)):
+            self._zeige_backend_fehler(
+                f"Browser konnte nicht geöffnet werden. URL: {frontend_url}"
+            )
+            return
+
+        self._loesche_backend_fehler()
+        self._set_status_text(
+            f"Online-Ansicht geöffnet ({monat:02d}/{jahr}, Mandant {mandant_id})."
         )
 
     def _on_speichern(self) -> None:

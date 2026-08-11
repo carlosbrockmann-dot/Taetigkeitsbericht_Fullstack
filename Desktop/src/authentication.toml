@@ -7,4 +7,5 @@ username_email = "carlos.brockmann@gmx.de"
 [webapi]
 token_expires_hours = 24
 base_url = "http://localhost:5108"
+frontend_url = "http://localhost:5173"
 verify_ssl = true

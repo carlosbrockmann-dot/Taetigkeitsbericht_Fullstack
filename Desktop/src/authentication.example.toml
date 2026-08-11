@@ -10,6 +10,8 @@ username_email = "mein.benutzer@example.com"
 base_url = "http://localhost:5108"
 # Backend HTTPS-Profil (dotnet run --launch-profile https):
 # base_url = "https://localhost:7022"
+# React-Online-Ansicht (npm run dev im Ordner Frontend):
+frontend_url = "http://localhost:5173"
 token_expires_hours = 24
 # TLS-Prüfung (Default true). Nach "dotnet dev-certs https --trust" belassen.
 # Ohne vertrautes Dev-Zertifikat lokal:

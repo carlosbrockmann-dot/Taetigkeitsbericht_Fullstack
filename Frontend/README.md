@@ -1,58 +1,70 @@
-# Tätigkeitsbericht – Frontend
+# Tätigkeitsbericht – Frontend (Online-Ansicht)
 
-<strong style="color:blue">Geplante React-Applikation (noch nicht implementiert).</strong>
+React-App (Vite + TypeScript) zur **reinen Ansicht** der Zeiteinträge aus dem Backend. Bearbeitung erfolgt in der Desktop-App; dieses Frontend navigiert nur zwischen Monaten für den übergebenen Mandanten.
 
-Web-Oberfläche zur Anmeldung und zur Übersicht der geleisteten Stunden. Kommunikation ausschließlich mit dem Backend, nicht mit der lokalen Desktop-SQLite-Datenbank.
+## Voraussetzungen
 
-<p style="color:red">Status: Planung – siehe <a href="../Planung.md">../Planung.md</a>. Backend-Technik: <a href="../README.md">../README.md</a></p>
+- Node.js 20+ (npm)
+- Laufendes Backend (`http://localhost:5108` oder HTTPS-Profil)
+- CORS im Backend erlaubt die Frontend-Origin (Standard: `http://localhost:5173`)
+- Desktop-App mit gültiger `authentication.toml` (Login + `frontend_url`)
 
-## Ziele
+## Start
 
-- **Login** (Benutzername/Passwort) gegen das Backend; Token speichern und bei Anfragen im Header mitschicken
-- **Übersicht** der geleisteten Stunden (Liste/Tabelle, Filter nach Zeitraum, Summen)
-- Geschützte Bereiche nur nach erfolgreicher Anmeldung
-- Logout und Behandlung abgelaufener Tokens
-- Betrieb in **AWS-VPC**: von außen für Benutzer per HTTPS erreichbar; keine direkte DB-Anbindung aus dem Browser
-
-## Geplante Technik
-
-| Thema | Vorschlag |
-|-------|-----------|
-| UI | React (TypeScript), z. B. Vite |
-| API | Client gegen die Backend-API (Basis-URL konfigurierbar) |
-| Auth | Token nach Login → Authorization-Header |
-| AWS | Deployment in VPC; öffentliche Freigabe nur für die Web-UI (und Aufruf der freigegebenen Backend-API) |
-
-Konkrete Bibliotheken werden bei Implementierung festgelegt. Details zur Backend-API: [../README.md](../README.md), [../Planung.md](../Planung.md).
-
-## Zusammenspiel und AWS
-
-```
-Benutzer (Browser)
-    │  HTTPS (öffentliche Freigabe)
-    ▼
-┌──────────── AWS VPC ────────────┐
-│  Frontend  →  Backend           │
-│                  │              │
-│                  ▼              │
-│         Datenbank (intern,      │
-│         Firewall/SG)            │
-└─────────────────────────────────┘
+```powershell
+cd Frontend
+npm install
+npm run dev
 ```
 
-- Frontend und Backend in der **VPC**
-- Datenbank nur **intern** vom Backend erreichbar (Firewall / Security Groups)
-- Benutzer erreichen Frontend (und die freigegebene Backend-API) von **außen**
-- Desktop nutzt dasselbe Backend mit Login-Token und **privaten Zertifikatsdateien** (siehe Desktop)
+Standard-URL: **http://localhost:5173**
 
-Daten kommen aus Uploads der Desktop-App (JSON-Liste von Zeiteinträgen mit Mitarbeiter-Bezug).
+Produktion-Build:
 
-## Abgrenzung
+```powershell
+npm run build
+npm run preview
+```
 
-| Dieses Frontend | Backend | Desktop |
-|-----------------|---------|---------|
-| Anzeige und Login im Browser; öffentlich in VPC | API, Auth, Persistenz; DB nur intern | Lokale Erfassung; Upload mit Token + Zertifikaten |
+## Konfiguration
 
-## Nächste Schritte
+Datei `.env` (Vorlage `.env.example`):
 
-Aufgaben und Reihenfolge: **[../Planung.md](../Planung.md)** (Phase 3, Phase 4 VPC). Projektgerüst und Startanleitung folgen mit der Implementierung.
+| Variable | Bedeutung | Default |
+|----------|-----------|---------|
+| `VITE_GRAPHQL_URL` | GraphQL-Endpunkt | `http://localhost:5108/graphql` |
+
+## Aufruf vom Desktop
+
+Der Button **„Online ansehen“** in den Zeiteinträgen:
+
+1. Meldet sich am Backend an, falls noch kein JWT vorliegt (`authentication.toml`).
+2. Öffnet den Browser mit URL der Form:
+
+```text
+{frontend_url}/?jahr=2026&monat=8&mandantId=1#token=<JWT>
+```
+
+- **Query:** `jahr`, `monat`, `mandantId` – Monat und Mandantenfilter
+- **Hash:** `token` – JWT (wird sofort in `sessionStorage` übernommen und aus der Adresszeile entfernt)
+
+Ohne Token zeigt die Seite einen Hinweis, die Ansicht über den Desktop zu öffnen.
+
+## Funktionen
+
+- Tabelle der Zeiteinträge des gewählten Monats (Query `zeiteintraege` mit `von`/`bis`/`mandantId`)
+- Navigation **Vorheriger / Nächster Monat**
+- Kein Login-Formular, kein Bearbeiten, kein Speichern
+
+## Technik
+
+| | |
+|--|--|
+| Stack | React 19, TypeScript, Vite |
+| API | `fetch` → GraphQL `POST`, Header `Authorization: Bearer …` |
+| Auth | Token nur aus Desktop-Handoff / `sessionStorage` |
+
+## Backend-Abhängigkeiten
+
+- Query `zeiteintraege(von, bis, mandantId)` mit JWT
+- CORS-Policy `Frontend` in `Backend/src/Program.cs` / `Cors:Origins` in `appsettings.json`

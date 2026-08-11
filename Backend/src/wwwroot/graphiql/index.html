@@ -35,7 +35,7 @@
 #   login(input: $input) { ok error login { token expiresAt mitarbeiterId benutzername } }
 # }
 
-# query Zeiteintraege($von: Date!, $bis: Date!) {
+# query Zeiteintraege($von: LocalDate!, $bis: LocalDate!) {
 #   zeiteintraege(von: $von, bis: $bis) { id datum anmerkung }
 # }
 `;
