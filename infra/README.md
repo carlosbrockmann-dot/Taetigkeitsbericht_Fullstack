@@ -59,14 +59,15 @@ Wenn Sie zwingend Benutzername+Passwort im Connection-String brauchen, ist **Ama
 
 | Secret | Beispiel / Bedeutung |
 |--------|----------------------|
-| `AWS_ACCESS_KEY_ID` | IAM-User für Deploy (Rechte: CloudFormation, EC2, DSQL, IAM, VPC, SSM, S3) |
-| `AWS_SECRET_ACCESS_KEY` | dazugehörig |
+| `AWS_ROLE_ARN` | IAM-Role für GitHub OIDC (Output aus `infra/cloudformation/github-oidc.yml`) |
 | `AWS_REGION` | z. B. `eu-central-1` (DSQL-Region prüfen) |
 | `JWT_KEY` | langes Secret für Backend-JWT |
 | `EC2_KEY_NAME` | optional, Name eines EC2-Key-Pairs (SSH); Deploy läuft primär über SSM |
 | `BACKEND_HOST_PUBLIC` | nach erstem Deploy: öffentliche Backend-URL für Frontend-Build (`VITE_GRAPHQL_URL`) |
 
-**Keine DB-Passwörter in Secrets speichern und in YAML hardcoden**, solange DSQL IAM nutzt.
+**Sandbox ohne Access Keys:** Keine `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`. Stattdessen OIDC – siehe [Deploy_aws.md](../Deploy_aws.md) Schritt 1.
+
+**Keine DB-Passwörter** in Secrets speichern und in YAML hardcoden, solange DSQL IAM nutzt.
 
 ## Einmalig / manuell
 

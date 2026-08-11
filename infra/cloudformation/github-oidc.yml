@@ -1,0 +1,54 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  GitHub Actions OIDC Provider + Deploy-Rolle (ohne Access Keys).
+  Einmalig in der AWS-Konsole als CloudFormation-Stack anlegen (Konsolen-Login genügt).
+
+Parameters:
+  GitHubOrg:
+    Type: String
+    Description: GitHub-Organisation oder Benutzername (z. B. carlosbrockmann-dot)
+  GitHubRepo:
+    Type: String
+    Default: Taetigkeitsbericht_Fullstack
+    Description: Repository-Name ohne Owner
+  RoleName:
+    Type: String
+    Default: taetigkeitsbericht-github-deploy
+
+Resources:
+  GitHubOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList:
+        - sts.amazonaws.com
+      ThumbprintList:
+        # Historischer Platzhalter; AWS validiert OIDC zusätzlich über das Zertifikat
+        - ffffffffffffffffffffffffffffffffffffffff
+
+  GitHubDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref RoleName
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Ref GitHubOidcProvider
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+              StringLike:
+                token.actions.githubusercontent.com:sub: !Sub "repo:${GitHubOrg}/${GitHubRepo}:*"
+      ManagedPolicyArns:
+        # Sandbox/Test: breit. Produktiv später auf Least Privilege einschränken.
+        - arn:aws:iam::aws:policy/AdministratorAccess
+
+Outputs:
+  RoleArn:
+    Description: In GitHub Secret AWS_ROLE_ARN eintragen
+    Value: !GetAtt GitHubDeployRole.Arn
+  OidcProviderArn:
+    Value: !Ref GitHubOidcProvider
