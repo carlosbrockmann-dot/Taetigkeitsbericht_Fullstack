@@ -28,7 +28,7 @@ jobs:
       frontend_instance_id: ${{ steps.outs.outputs.frontend_instance_id }}
       backend_public_ip: ${{ steps.outs.outputs.backend_public_ip }}
       frontend_public_ip: ${{ steps.outs.outputs.frontend_public_ip }}
-      dsql_endpoint: ${{ steps.outs.outputs.dsql_endpoint }}
+      # dsql_endpoint bewusst kein Job-Output: GitHub filtert Hostnamen oft als Secret heraus
       ec2_role_arn: ${{ steps.outs.outputs.ec2_role_arn }}
     steps:
       - name: Checkout
@@ -114,8 +114,9 @@ jobs:
           echo "frontend_instance_id=$(get FrontendInstanceId)" >> "$GITHUB_OUTPUT"
           echo "backend_public_ip=$(get BackendPublicIp)" >> "$GITHUB_OUTPUT"
           echo "frontend_public_ip=$(get FrontendPublicIp)" >> "$GITHUB_OUTPUT"
-          echo "dsql_endpoint=$(get DsqlEndpoint)" >> "$GITHUB_OUTPUT"
           echo "ec2_role_arn=$(get Ec2RoleArn)" >> "$GITHUB_OUTPUT"
+          # DsqlEndpoint nur loggen (Job-Outputs würden von GitHub oft verworfen)
+          echo "DsqlEndpoint=$(get DsqlEndpoint)"
 
   build-and-deploy-apps:
     name: Build & deploy Backend + Frontend auf EC2
@@ -131,6 +132,25 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
+
+      - name: Resolve DSQL endpoint from stack
+        id: stack
+        run: |
+          set -euo pipefail
+          get() { aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
+            --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" --output text; }
+          DSQL_ENDPOINT="$(get DsqlEndpoint)"
+          EC2_ROLE_ARN="$(get Ec2RoleArn)"
+          if [ -z "$DSQL_ENDPOINT" ] || [ "$DSQL_ENDPOINT" = "None" ]; then
+            echo "::error::DsqlEndpoint fehlt im Stack $STACK_NAME"
+            exit 1
+          fi
+          # In denselben Job via ENV (nicht Job-Output), damit GitHub den Wert nicht verwirft
+          {
+            echo "DSQL_ENDPOINT=$DSQL_ENDPOINT"
+            echo "EC2_ROLE_ARN=$EC2_ROLE_ARN"
+          } >> "$GITHUB_ENV"
+          echo "DsqlEndpoint aufgelöst (${#DSQL_ENDPOINT} Zeichen)"
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
@@ -210,11 +230,14 @@ jobs:
       - name: Deploy Backend via SSM
         env:
           INSTANCE_ID: ${{ needs.deploy-infra.outputs.backend_instance_id }}
-          DSQL_ENDPOINT: ${{ needs.deploy-infra.outputs.dsql_endpoint }}
           BUCKET: ${{ steps.s3.outputs.bucket }}
           JWT_KEY: ${{ secrets.JWT_KEY }}
         run: |
           set -euo pipefail
+          if [ -z "${DSQL_ENDPOINT:-}" ]; then
+            echo "::error::DSQL_ENDPOINT ist leer"
+            exit 1
+          fi
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "$INSTANCE_ID" \
             --document-name "AWS-RunShellScript" \
@@ -274,7 +297,7 @@ jobs:
           echo "### Deploy fertig" >> "$GITHUB_STEP_SUMMARY"
           echo "- Frontend: http://${{ needs.deploy-infra.outputs.frontend_public_ip }}/" >> "$GITHUB_STEP_SUMMARY"
           echo "- Backend:  http://${{ needs.deploy-infra.outputs.backend_public_ip }}:5108/graphql" >> "$GITHUB_STEP_SUMMARY"
-          echo "- DSQL endpoint: ${{ needs.deploy-infra.outputs.dsql_endpoint }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "- EC2 Role (für AWS IAM GRANT verwaltung): ${{ needs.deploy-infra.outputs.ec2_role_arn }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- DSQL endpoint: ${DSQL_ENDPOINT}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- EC2 Role (für AWS IAM GRANT verwaltung): ${EC2_ROLE_ARN:-${{ needs.deploy-infra.outputs.ec2_role_arn }}}" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "Hinweis: Aurora DSQL braucht IAM-Tokens statt festem Passwort \`verwaltung\`. Siehe infra/README.md." >> "$GITHUB_STEP_SUMMARY"

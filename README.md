@@ -53,3 +53,19 @@ Siehe Abschnitt „AWS-Netzwerk und Sicherheit“ in [Planung.md](./Planung.md).
 - [Frontend/README.md](./Frontend/README.md) – React Online-Ansicht  
 - [infra/README.md](./infra/README.md) – AWS VPC, Aurora DSQL, EC2, GitHub Actions Deploy  
 - [Deploy_aws.md](./Deploy_aws.md) – konkrete Schritte für den AWS-Deploy mit Access Keys (Desktop bleibt on premises)
+
+## AWS-Deploy (Kurz)
+
+Pipeline: Push auf `main` → [`.github/workflows/deploy-aws.yml`](./.github/workflows/deploy-aws.yml). Anleitung: [Deploy_aws.md](./Deploy_aws.md).
+
+**IAM-Benutzer** (Access Keys für GitHub Actions):
+
+| Sandbox / Test | Produktion |
+|----------------|------------|
+| Policy **`AdministratorAccess`** am Deploy-Benutzer | Least Privilege (CloudFormation, EC2, VPC, IAM, S3, SSM, DSQL, …) |
+
+Ohne passende Rechte: `AccessDenied` in der Pipeline (z. B. CloudFormation).
+
+**GitHub:** Secrets unter **Settings → Secrets and variables → Actions → Repository secrets**  
+(`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `JWT_KEY`).  
+**Environment secrets** werden vom aktuellen Workflow **nicht** gelesen.

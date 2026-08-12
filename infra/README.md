@@ -55,13 +55,16 @@ Wenn Sie zwingend Benutzername+Passwort im Connection-String brauchen, ist **Ama
 | `infra/scripts/remote-bootstrap.sh` | User-Data / SSM: Runtime auf EC2 |
 | `infra/scripts/post-dsql-setup.sql` | Rolle `verwaltung` + Hinweise DB-Name |
 
-## GitHub Secrets (Repository → Settings → Secrets)
+## GitHub Secrets (Repository secrets)
+
+Pfad: Repository → **Settings** → **Secrets and variables** → **Actions** → **Repository secrets**  
+(**nicht** Environment secrets – der Workflow hat kein `environment:`).
 
 | Secret | Beispiel / Bedeutung |
 |--------|----------------------|
 | `AWS_ACCESS_KEY_ID` | Access Key ID des IAM-Deploy-Benutzers |
 | `AWS_SECRET_ACCESS_KEY` | Secret Access Key (nur in GitHub Secrets) |
-| `AWS_REGION` | z. B. `eu-central-1` (DSQL-Region prüfen) |
+| `AWS_REGION` | z. B. `eu-central-1` (DSQL-Region prüfen; nicht leer lassen) |
 | `JWT_KEY` | langes Secret für Backend-JWT |
 | `EC2_KEY_NAME` | optional, Name eines EC2-Key-Pairs (SSH); Deploy läuft primär über SSM |
 | `BACKEND_HOST_PUBLIC` | nach erstem Deploy: öffentliche Backend-URL für Frontend-Build (`VITE_GRAPHQL_URL`) |
@@ -70,14 +73,25 @@ Wenn Sie zwingend Benutzername+Passwort im Connection-String brauchen, ist **Ama
 
 **Keine DB-Passwörter** in Secrets speichern und in YAML hardcoden, solange DSQL IAM nutzt.
 
+## IAM-Benutzer für die Pipeline
+
+Der Benutzer, zu dem die Access Keys gehören, braucht genug Rechte für den Stack-Deploy:
+
+| Sandbox / Lernen | Produktion |
+|------------------|------------|
+| **`AdministratorAccess`** | Least Privilege: CloudFormation, EC2, VPC, IAM (Named Roles/Profiles), S3, SSM, Aurora DSQL |
+
+Sonst scheitert der Workflow mit `AccessDenied` (z. B. `cloudformation:DescribeStacks`).
+
 ## Einmalig / manuell
 
 1. AWS-Konto, Region mit Aurora DSQL.
-2. GitHub Secrets setzen.
-3. Optional EC2 Key Pair anlegen.
-4. Push auf `main` → Workflow läuft.
-5. Nach erstem erfolgreichen Stack: öffentliche Backend-URL in `BACKEND_HOST_PUBLIC` eintragen und erneut deployen (Frontend-Build).
-6. `dotnet ef database update` auf dem Backend (oder Migrations-Job), sobald DSQL erreichbar ist.
+2. IAM-Deploy-Benutzer mit Rechten (Sandbox: `AdministratorAccess`) + Access Keys.
+3. **Repository secrets** in GitHub setzen.
+4. Optional EC2 Key Pair anlegen.
+5. Push auf `main` → Workflow läuft.
+6. Nach erstem erfolgreichen Stack: öffentliche Backend-URL in `BACKEND_HOST_PUBLIC` eintragen und erneut deployen (Frontend-Build).
+7. `dotnet ef database update` auf dem Backend (oder Migrations-Job), sobald DSQL erreichbar ist.
 
 ## Lokal Stack testen
 

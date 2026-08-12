@@ -128,12 +128,21 @@ Ziel: GitHub Actions meldet sich mit **Access Key ID** und **Secret Access Key**
 
 1. AWS-Konsole → Service **IAM**.
 2. **Users** → **Create user**.
-3. User name z. B. `taetigkeitsbericht-github-deploy`.
-4. **Next** → Berechtigungen:
-   - Zum schnellen Testen / in der Sandbox: Policy **`AdministratorAccess`** anhängen  
-     (direkt oder über eine Gruppe).
-   - Für Produktion später: Least Privilege (CloudFormation, EC2, VPC, DSQL, SSM, S3, IAM nur soweit nötig).
-5. **Create user**.
+3. User name z. B. `taetigkeitsbericht-github-deploy` (oder `verwaltung_admin`).
+4. **Next** → Berechtigungen anhängen (siehe unten) → **Create user**.
+
+#### Nötige Rechte (IAM-Policies)
+
+Der Deploy-Benutzer muss die AWS-APIs der Pipeline aufrufen dürfen (CloudFormation, EC2, VPC, IAM, S3, SSM, Aurora DSQL, …).
+
+| Umgebung | Empfehlung |
+|----------|------------|
+| **Sandbox / Lernen** | Managed Policy **`AdministratorAccess`** direkt am Benutzer (oder über eine Gruppe) |
+| **Produktion** | Least Privilege: nur die Services der Pipeline (CloudFormation, EC2, VPC, IAM für Named Roles/Profiles, S3, SSM, DSQL, ggf. STS) |
+
+Ohne ausreichende Rechte schlägt der Workflow fehl, z. B. mit `AccessDenied` bei `cloudformation:DescribeStacks` / `CreateChangeSet`.
+
+**Prüfen:** IAM → User → Reiter **Permissions** – dort muss mindestens eine passende Policy sichtbar sein.
 
 ### 1.2 Access Key erzeugen
 
@@ -169,18 +178,31 @@ Ziel: GitHub Actions meldet sich mit **Access Key ID** und **Secret Access Key**
 
 ## Schritt 2 – GitHub Secrets setzen
 
+Die Pipeline liest **`secrets.*` ohne `environment:`** in der Workflow-Datei. Deshalb müssen die Werte unter **Repository secrets** liegen – **nicht** unter Environment secrets.
+
 1. GitHub → Repo öffnen.
 2. **Settings** → **Secrets and variables** → **Actions**.
-3. **New repository secret** für jeden Eintrag:
+3. Reiter **Secrets** → Abschnitt **Repository secrets** (nicht „Environments“ / Environment secrets).
+4. **New repository secret** für jeden Eintrag:
 
 | Secret | Pflicht | Inhalt |
 |--------|---------|--------|
-| `AWS_ACCESS_KEY_ID` | ja | Access key ID aus Schritt 1.2 |
-| `AWS_SECRET_ACCESS_KEY` | ja | Secret access key aus Schritt 1.2 |
-| `AWS_REGION` | ja | z. B. `eu-central-1` (gleiche Region wie in der Konsole) |
+| `AWS_ACCESS_KEY_ID` | ja | Access key ID (AWS: „Zugriffsschlüssel“) aus Schritt 1.2 |
+| `AWS_SECRET_ACCESS_KEY` | ja | Secret access key (AWS: „Geheimer Zugriffsschlüssel“) |
+| `AWS_REGION` | ja | z. B. `eu-central-1` (gleiche Region wie in der Konsole; darf nicht leer sein) |
 | `JWT_KEY` | ja | Langes Zufallsgeheimnis (≥ 32 Zeichen) für Backend-JWT |
 | `EC2_KEY_NAME` | nein | Name eines EC2-Key-Pairs, falls angelegt |
 | `BACKEND_HOST_PUBLIC` | später | z. B. `http://3.120.x.x:5108` – **nach** dem ersten Deploy setzen |
+
+### Repository secrets vs. Environment secrets
+
+| Ort in GitHub | Wird von `deploy-aws.yml` gelesen? |
+|---------------|-------------------------------------|
+| **Repository secrets** | **Ja** |
+| Environment secrets (unter einem Environment) | **Nein** – der Workflow setzt kein `environment:` |
+| Repository variables | Nur Fallback für `AWS_REGION` (`vars.AWS_REGION`) |
+
+Environment secrets sind unsichtbar für diesen Workflow, auch wenn Name und Werte stimmen. Secrets nach dem Speichern nicht mehr einsehbar – bei Unsicherheit Wert neu setzen.
 
 ### JWT_KEY erzeugen (PowerShell)
 
@@ -402,8 +424,8 @@ Actions → Run workflow → Option **`force_instance_refresh`** = true.
 
 ## Checkliste nach dem ersten erfolgreichen Deploy
 
-- [ ] IAM-Benutzer angelegt, Access Keys erzeugt
-- [ ] Secrets `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `JWT_KEY` gesetzt
+- [ ] IAM-Benutzer angelegt, Policy (Sandbox: `AdministratorAccess`) angehängt, Access Keys erzeugt
+- [ ] **Repository secrets** `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `JWT_KEY` gesetzt (nicht Environment secrets)
 - [ ] Workflow **Deploy AWS (main)** grün
 - [ ] Stack `taetigkeitsbericht` = `CREATE_COMPLETE` / `UPDATE_COMPLETE`
 - [ ] Frontend `http://<FrontendPublicIp>/` lädt
@@ -422,9 +444,11 @@ Actions → Run workflow → Option **`force_instance_refresh`** = true.
 
 | Symptom | Maßnahme |
 |---------|----------|
-| Kein Access-Key-Button in der Konsole | Sandbox/Konto blockiert Keys – IAM-Rechte oder Konto-Typ prüfen |
+| `AccessDenied` bei CloudFormation/EC2/SSM | IAM-Benutzer: Policy prüfen – Sandbox: **`AdministratorAccess`** |
+| Secrets „fehlen“ obwohl angelegt | Werte unter **Repository secrets** anlegen; Environment secrets werden ignoriert |
+| `AWS_REGION` / leeres Secret | Secret neu setzen (leerer Wert = „nicht gesetzt“); Schreibweise exakt `AWS_REGION` |
 | `InvalidClientTokenId` / `SignatureDoesNotMatch` | Falsche oder abgelaufene Keys; Secrets neu setzen; Key in IAM aktiv? |
-| `AccessDenied` bei CloudFormation/EC2 | IAM-Benutzer braucht genug Rechte (Sandbox: oft `AdministratorAccess`) |
+| Kein Access-Key-Button in der Konsole | Sandbox/Konto blockiert Keys – IAM-Rechte oder Konto-Typ prüfen |
 | Workflow nutzt noch `role-to-assume` / `AWS_ROLE_ARN` | Aktuellen Stand von `deploy-aws.yml` ziehen (Access Keys) |
 | CloudFormation IAM capability | Haken „acknowledge IAM resources“ setzen (falls manuell) |
 | SSM Instance not Online | 2–5 Min warten; Instance Profile prüfen; Instanz neu starten |
