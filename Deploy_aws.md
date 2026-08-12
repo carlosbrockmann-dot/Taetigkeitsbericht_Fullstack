@@ -156,7 +156,7 @@ Ziel: GitHub Actions meldet sich mit **Access Key ID** und **Secret Access Key**
 
 ```yaml
 - name: Configure AWS credentials (Access Keys)
-  uses: aws-actions/configure-aws-credentials@v4
+  uses: aws-actions/configure-aws-credentials@v6
   with:
     aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
     aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
