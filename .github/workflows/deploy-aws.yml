@@ -14,7 +14,8 @@ permissions:
   contents: read
 
 env:
-  AWS_REGION: ${{ secrets.AWS_REGION }}
+  # Secret bevorzugen; Variable als Fallback (falls unter Variables statt Secrets angelegt)
+  AWS_REGION: ${{ secrets.AWS_REGION || vars.AWS_REGION }}
   STACK_NAME: taetigkeitsbericht
   PROJECT_NAME: taetigkeitsbericht
 
@@ -33,12 +34,41 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      - name: Check required secrets
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          JWT_KEY: ${{ secrets.JWT_KEY }}
+        run: |
+          set -euo pipefail
+          missing=0
+          if [ -z "${AWS_REGION:-}" ]; then
+            echo "::error::AWS_REGION fehlt. Unter Settings → Secrets and variables → Actions ein Secret (oder Variable) 'AWS_REGION' anlegen, z. B. eu-central-1"
+            missing=1
+          fi
+          if [ -z "${AWS_ACCESS_KEY_ID:-}" ]; then
+            echo "::error::Secret AWS_ACCESS_KEY_ID fehlt."
+            missing=1
+          fi
+          if [ -z "${AWS_SECRET_ACCESS_KEY:-}" ]; then
+            echo "::error::Secret AWS_SECRET_ACCESS_KEY fehlt."
+            missing=1
+          fi
+          if [ -z "${JWT_KEY:-}" ]; then
+            echo "::error::Secret JWT_KEY fehlt (wird später fürs Backend-Deploy gebraucht)."
+            missing=1
+          fi
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+          echo "AWS_REGION=$AWS_REGION"
+
       - name: Configure AWS credentials (Access Keys)
         uses: aws-actions/configure-aws-credentials@v6
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Deploy / update CloudFormation stack
         id: cfn
@@ -87,7 +117,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
