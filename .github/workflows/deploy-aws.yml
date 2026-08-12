@@ -84,12 +84,25 @@ jobs:
             PARAMS+=("KeyName=${{ secrets.EC2_KEY_NAME }}")
           fi
 
-          aws cloudformation deploy \
+          if ! aws cloudformation deploy \
             --stack-name "${STACK_NAME}" \
             --template-file infra/cloudformation/taetigkeitsbericht-aws.yml \
             --capabilities CAPABILITY_NAMED_IAM \
             --no-fail-on-empty-changeset \
-            --parameter-overrides "${PARAMS[@]}"
+            --parameter-overrides "${PARAMS[@]}"; then
+            echo "::error::CloudFormation deploy fehlgeschlagen – letzte Events:"
+            aws cloudformation describe-stack-events \
+              --stack-name "${STACK_NAME}" \
+              --max-items 20 \
+              --query "StackEvents[].[Timestamp,ResourceStatus,LogicalResourceId,ResourceStatusReason]" \
+              --output table || true
+            aws cloudformation describe-events \
+              --stack-name "${STACK_NAME}" \
+              --filter FailedEvents=true \
+              --query "OperationEvents[].[Timestamp,ValidationName,ValidationStatusReason,ValidationPath,LogicalResourceId]" \
+              --output table || true
+            exit 1
+          fi
 
       - name: Export stack outputs
         id: outs

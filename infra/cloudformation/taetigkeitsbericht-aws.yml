@@ -225,7 +225,7 @@ Resources:
   DsqlCluster:
     Type: AWS::DSQL::Cluster
     Properties:
-      DeletionProtection: false
+      DeletionProtectionEnabled: false
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}-dsql"
