@@ -52,4 +52,4 @@ Siehe Abschnitt „AWS-Netzwerk und Sicherheit“ in [Planung.md](./Planung.md).
 - [Backend/README.md](./Backend/README.md) – GraphQL-Backend  
 - [Frontend/README.md](./Frontend/README.md) – React Online-Ansicht  
 - [infra/README.md](./infra/README.md) – AWS VPC, Aurora DSQL, EC2, GitHub Actions Deploy  
-- [Deploy_aws.md](./Deploy_aws.md) – konkrete Schritte für den AWS-Deploy (Desktop bleibt on premises)  
+- [Deploy_aws.md](./Deploy_aws.md) – konkrete Schritte für den AWS-Deploy mit Access Keys (Desktop bleibt on premises)

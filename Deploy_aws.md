@@ -1,6 +1,6 @@
-# Deploy auf AWS – konkrete Schritte
+# Deploy auf AWS – konkrete Schritte (Access Keys)
 
-Diese Anleitung beschreibt **ausführlich**, wie Backend und Frontend in AWS betrieben und bei jedem Commit auf `main` aktualisiert werden.
+Diese Anleitung beschreibt **ausführlich**, wie Backend und Frontend in AWS betrieben und bei jedem Commit auf `main` aktualisiert werden – über den **traditionellen Weg mit IAM-Benutzer und Access Keys**.
 
 Die **Desktop-Applikation bleibt on premises** (lokal auf den PCs der Benutzer, SQLite lokal). Sie spricht das Backend nur über das Internet (Login, **Abgeben**, **Online ansehen**).
 
@@ -10,17 +10,18 @@ Die **Desktop-Applikation bleibt on premises** (lokal auf den PCs der Benutzer, 
 | Kurzreferenz Infra | [infra/README.md](./infra/README.md) |
 | Pipeline | [`.github/workflows/deploy-aws.yml`](./.github/workflows/deploy-aws.yml) |
 | App-Stack | [`infra/cloudformation/taetigkeitsbericht-aws.yml`](./infra/cloudformation/taetigkeitsbericht-aws.yml) |
-| OIDC-Stack | [`infra/cloudformation/github-oidc.yml`](./infra/cloudformation/github-oidc.yml) |
+
+Die Pipeline ist bereits auf **Access Keys** (`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`) konfiguriert.
 
 ---
 
 ## Inhaltsverzeichnis
 
 1. [Zielbild](#zielbild)
-2. [Was Sie nicht brauchen](#was-sie-nicht-brauchen)
+2. [Was Sie brauchen / nicht brauchen](#was-sie-brauchen--nicht-brauchen)
 3. [Voraussetzungen](#voraussetzungen)
 4. [Schritt 0 – AWS-Konsole öffnen und Region wählen](#schritt-0--aws-konsole-öffnen-und-region-wählen)
-5. [Schritt 1 – OIDC-Rolle anlegen (ohne Access Keys)](#schritt-1--oidc-rolle-anlegen-ohne-access-keys)
+5. [Schritt 1 – IAM-Benutzer und Access Keys](#schritt-1--iam-benutzer-und-access-keys)
 6. [Schritt 2 – GitHub Secrets setzen](#schritt-2--github-secrets-setzen)
 7. [Schritt 3 – Optional: EC2-Key-Pair](#schritt-3--optional-ec2-key-pair)
 8. [Schritt 4 – Code auf main und ersten Deploy](#schritt-4--code-auf-main-und-ersten-deploy)
@@ -72,12 +73,16 @@ Die **Desktop-Applikation bleibt on premises** (lokal auf den PCs der Benutzer, 
 
 ---
 
-## Was Sie nicht brauchen
+## Was Sie brauchen / nicht brauchen
+
+| Brauchen | Warum |
+|----------|--------|
+| **IAM-Benutzer** für Deploy | Pipeline authentifiziert sich mit dessen Access Keys |
+| **Access Key ID + Secret Access Key** | Traditionelle programmatische Anmeldung in GitHub Actions |
 
 | Nicht nötig | Warum |
 |-------------|--------|
-| Eigenen **IAM-Benutzer** nur für Deploy anlegen | Pipeline nutzt eine **IAM-Rolle** per OIDC |
-| **Access Keys** (programmatischer Zugriff) | Viele Sandboxes bieten keinen Key-Button – das ist ok |
+| OIDC-Provider / `github-oidc.yml` | Hier keine Federated Role |
 | Desktop in AWS installieren | Desktop bleibt on premises |
 | Öffentlicher DB-Port | DSQL nur über PrivateLink |
 
@@ -86,12 +91,11 @@ Die **Desktop-Applikation bleibt on premises** (lokal auf den PCs der Benutzer, 
 ## Voraussetzungen
 
 1. AWS-Konto oder **Sandbox** mit Rechten für: VPC, EC2, IAM, CloudFormation, SSM, S3, Aurora DSQL.
-2. Login in die AWS-Konsole möglich (**Konsolenpasswort** reicht).
+2. In der Konsole **Access Keys anlegen dürfen** (Security credentials → Create access key).
 3. GitHub-Zugriff auf das Repo (Secrets schreiben, Actions starten).
 4. Region, in der **Aurora DSQL** verfügbar ist (in der Konsole unter Aurora DSQL prüfen).
 5. Dateien im Repo vorhanden (nach Pull/Push von `main`):
-   - `.github/workflows/deploy-aws.yml`
-   - `infra/cloudformation/github-oidc.yml`
+   - `.github/workflows/deploy-aws.yml` (Access Keys)
    - `infra/cloudformation/taetigkeitsbericht-aws.yml`
    - `infra/scripts/post-dsql-setup.sql`
 
@@ -116,49 +120,50 @@ Account-ID notieren (oben rechts unter dem Kontomenü) – wird für `AWS IAM GR
 
 ---
 
-## Schritt 1 – OIDC-Rolle anlegen (ohne Access Keys)
+## Schritt 1 – IAM-Benutzer und Access Keys
 
-Ziel: GitHub Actions darf kurzzeitig eine IAM-Rolle übernehmen, **ohne** Access Key.
+Ziel: GitHub Actions meldet sich mit **Access Key ID** und **Secret Access Key** eines IAM-Benutzers an.
 
-### 1.1 Template lokal bereithalten
+### 1.1 IAM-Benutzer anlegen
 
-Datei im Repo: `infra/cloudformation/github-oidc.yml`
+1. AWS-Konsole → Service **IAM**.
+2. **Users** → **Create user**.
+3. User name z. B. `taetigkeitsbericht-github-deploy`.
+4. **Next** → Berechtigungen:
+   - Zum schnellen Testen / in der Sandbox: Policy **`AdministratorAccess`** anhängen  
+     (direkt oder über eine Gruppe).
+   - Für Produktion später: Least Privilege (CloudFormation, EC2, VPC, DSQL, SSM, S3, IAM nur soweit nötig).
+5. **Create user**.
 
-Parameter später:
+### 1.2 Access Key erzeugen
 
-| Parameter | Beispiel |
-|-----------|----------|
-| `GitHubOrg` | `carlosbrockmann-dot` (GitHub-Benutzer oder Organisation) |
-| `GitHubRepo` | `Taetigkeitsbericht_Fullstack` |
-| `RoleName` | `taetigkeitsbericht-github-deploy` (Default) |
+1. Den neuen Benutzer öffnen → Reiter **Security credentials**.
+2. **Create access key**.
+3. Use case: **Application running outside AWS** (oder vergleichbar „CLI / CI“) → **Next**.
+4. Optional Beschreibung → **Create access key**.
+5. **Access key ID** und **Secret access key** sofort notieren bzw. CSV speichern.  
+   Der Secret wird **nur einmal** angezeigt.
 
-### 1.2 CloudFormation-Stack in der Konsole
+### 1.3 Sicherheit
 
-1. AWS-Konsole → Service **CloudFormation**.
-2. **Create stack** → **With new resources (standard)**.
-3. **Template is ready** → **Upload a template file** → Datei `github-oidc.yml` wählen → **Next**.
-4. Stack name z. B. `taetigkeitsbericht-github-oidc`.
-5. Parameter `GitHubOrg` / `GitHubRepo` **exakt** wie im GitHub-Repo-Pfad eintragen → **Next**.
-6. Optional Tags → **Next**.
-7. Ganz unten: Haken bei  
-   **I acknowledge that AWS CloudFormation might create IAM resources with custom names.**  
-8. **Submit** / **Create stack**.
-9. Warten bis Status **`CREATE_COMPLETE`**.
-10. Reiter **Outputs** → Wert **`RoleArn`** kopieren  
-    (Form: `arn:aws:iam::ACCOUNT_ID:role/taetigkeitsbericht-github-deploy`).
+- Keys nur in **GitHub Secrets** hinterlegen, nie ins Repo committen.
+- Bei Kompromittierung: Key in IAM deaktivieren/löschen und neuen anlegen, Secrets aktualisieren.
+- Rotieren Sie Keys regelmäßig.
 
-### 1.3 Fehler: OIDC-Provider existiert schon
+### 1.4 Workflow (bereits Access Keys)
 
-Meldung ähnlich `EntityAlreadyExists` / Provider bereits vorhanden:
+`.github/workflows/deploy-aws.yml` konfiguriert AWS so:
 
-1. **IAM → Identity providers** prüfen, ob `token.actions.githubusercontent.com` existiert.
-2. Option A: Bestehenden Provider behalten und nur eine Role manuell anlegen (Trust: dieser Provider, Condition `repo:ORG/REPO:*`).
-3. Option B: In der YAML die Resource `GitHubOidcProvider` entfernen und `Federated` auf den bestehenden Provider-ARN setzen, Stack erneut anlegen.
+```yaml
+- name: Configure AWS credentials (Access Keys)
+  uses: aws-actions/configure-aws-credentials@v4
+  with:
+    aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+    aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+    aws-region: ${{ secrets.AWS_REGION }}
+```
 
-### 1.4 Was die Role darf
-
-In der Sandbox-Vorlage hängt an der Role vorerst **`AdministratorAccess`** (einfaches Testen).  
-Für Produktion später auf Least Privilege reduzieren (CloudFormation, EC2, VPC, DSQL, SSM, S3, IAM nur soweit nötig).
+`permissions` enthält nur `contents: read` (kein `id-token: write`).
 
 ---
 
@@ -170,7 +175,8 @@ Für Produktion später auf Least Privilege reduzieren (CloudFormation, EC2, VPC
 
 | Secret | Pflicht | Inhalt |
 |--------|---------|--------|
-| `AWS_ROLE_ARN` | ja | Output `RoleArn` aus Schritt 1 |
+| `AWS_ACCESS_KEY_ID` | ja | Access key ID aus Schritt 1.2 |
+| `AWS_SECRET_ACCESS_KEY` | ja | Secret access key aus Schritt 1.2 |
 | `AWS_REGION` | ja | z. B. `eu-central-1` (gleiche Region wie in der Konsole) |
 | `JWT_KEY` | ja | Langes Zufallsgeheimnis (≥ 32 Zeichen) für Backend-JWT |
 | `EC2_KEY_NAME` | nein | Name eines EC2-Key-Pairs, falls angelegt |
@@ -184,7 +190,7 @@ Für Produktion später auf Least Privilege reduzieren (CloudFormation, EC2, VPC
 
 ### Nicht anlegen
 
-- `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` – bei OIDC unnötig und in Ihrer Sandbox oft unmöglich.
+- `AWS_ROLE_ARN` – die Pipeline nutzt Access Keys, keine OIDC-Rolle.
 - DB-Passwort `verwaltung` – Aurora DSQL arbeitet mit IAM-Tokens.
 
 ---
@@ -205,8 +211,8 @@ Nur nötig, wenn Sie per SSH auf die Instanzen möchten. Der Deploy läuft über
 
 Sicherstellen, dass auf `main` liegen:
 
-- Workflow `deploy-aws.yml`
-- beide CloudFormation-Templates
+- Workflow `deploy-aws.yml` mit Access-Key-Credentials
+- CloudFormation-Template `taetigkeitsbericht-aws.yml`
 - Backend- und Frontend-Quellcode
 
 ### 4.2 Workflow starten
@@ -243,7 +249,7 @@ CloudFormation → Stack **`taetigkeitsbericht`** → **Outputs**:
 | `Ec2RoleArn` | Für `AWS IAM GRANT` der DB-Rolle `verwaltung` |
 | `BackendInstanceId` / `FrontendInstanceId` | SSM / EC2-Konsole |
 
-Wenn die AWS CLI in der Sandbox nutzbar ist (selten ohne Keys):
+Mit AWS CLI (Access Keys lokal konfiguriert, z. B. `aws configure`):
 
 ```powershell
 aws cloudformation describe-stacks --stack-name taetigkeitsbericht --query "Stacks[0].Outputs"
@@ -257,7 +263,7 @@ Ohne CLI reicht die Konsole.
 
 Reihenfolge bei jedem Lauf:
 
-1. **OIDC:** GitHub holt ein Identitäts-Token und übernimmt `AWS_ROLE_ARN`.
+1. **Access Keys:** GitHub Actions lädt `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` und spricht die AWS-API damit an.
 2. **CloudFormation deploy** von `taetigkeitsbericht-aws.yml`:
    - VPC `10.20.0.0/16`, öffentliche und private Subnets
    - Internet Gateway, Routing
@@ -390,14 +396,14 @@ Bei **jedem Push auf `main`** (oder manuellem Run):
 **Komplette EC2-Neuinstanzen:**  
 Actions → Run workflow → Option **`force_instance_refresh`** = true.
 
-**Sandbox abgelaufen:** Alle Ressourcen weg. OIDC-Stack und App-Stack erneut anlegen (Schritte 1 und 4), Secrets falls Account-ID/Role-ARN neu sind aktualisieren.
+**Sandbox abgelaufen:** Alle Ressourcen weg. IAM-Benutzer/Keys prüfen (ggf. neu anlegen), App-Stack erneut deployen (Schritt 4), Secrets aktualisieren.
 
 ---
 
 ## Checkliste nach dem ersten erfolgreichen Deploy
 
-- [ ] Stack `taetigkeitsbericht-github-oidc` = `CREATE_COMPLETE`, `RoleArn` in GitHub
-- [ ] Secrets `AWS_ROLE_ARN`, `AWS_REGION`, `JWT_KEY` gesetzt
+- [ ] IAM-Benutzer angelegt, Access Keys erzeugt
+- [ ] Secrets `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `JWT_KEY` gesetzt
 - [ ] Workflow **Deploy AWS (main)** grün
 - [ ] Stack `taetigkeitsbericht` = `CREATE_COMPLETE` / `UPDATE_COMPLETE`
 - [ ] Frontend `http://<FrontendPublicIp>/` lädt
@@ -416,16 +422,16 @@ Actions → Run workflow → Option **`force_instance_refresh`** = true.
 
 | Symptom | Maßnahme |
 |---------|----------|
-| Kein Access-Key-Button, nur Konsolenpasswort | Erwartet → OIDC Schritt 1, kein IAM-Deploy-User nötig |
-| Muss ich einen IAM-Benutzer anlegen? | **Nein** für die Pipeline – nur OIDC-Role |
-| `AssumeRoleWithWebIdentity` denied | `AWS_ROLE_ARN` falsch; `GitHubOrg`/`GitHubRepo` passen nicht; Workflow braucht `permissions: id-token: write` |
-| OIDC-Provider already exists | Bestehenden Provider nutzen, siehe Schritt 1.3 |
-| CloudFormation IAM capability | Haken „acknowledge IAM resources“ setzen |
+| Kein Access-Key-Button in der Konsole | Sandbox/Konto blockiert Keys – IAM-Rechte oder Konto-Typ prüfen |
+| `InvalidClientTokenId` / `SignatureDoesNotMatch` | Falsche oder abgelaufene Keys; Secrets neu setzen; Key in IAM aktiv? |
+| `AccessDenied` bei CloudFormation/EC2 | IAM-Benutzer braucht genug Rechte (Sandbox: oft `AdministratorAccess`) |
+| Workflow nutzt noch `role-to-assume` / `AWS_ROLE_ARN` | Aktuellen Stand von `deploy-aws.yml` ziehen (Access Keys) |
+| CloudFormation IAM capability | Haken „acknowledge IAM resources“ setzen (falls manuell) |
 | SSM Instance not Online | 2–5 Min warten; Instance Profile prüfen; Instanz neu starten |
 | Frontend ohne Daten | `BACKEND_HOST_PUBLIC`, CORS, JWT/Token, Browser-Konsole/Netzwerk-Tab |
 | Backend ohne DB | PrivateLink, SG 5432, IAM `dsql:DbConnect*`, Token statt Passwort |
 | Desktop erreicht Backend nicht | Öffentliche IP, SG, Firmen-Firewall, `base_url` Tippfehler, HTTP vs HTTPS |
-| Sandbox leer nach Lab-Ende | Stacks und Secrets (Role ARN) neu aufsetzen |
+| Sandbox leer nach Lab-Ende | Stacks und ggf. IAM-Keys/Secrets neu aufsetzen |
 
 ---
 
@@ -433,7 +439,8 @@ Actions → Run workflow → Option **`force_instance_refresh`** = true.
 
 - Ressourcen und Daten sind **zeitlich begrenzt**.
 - Notieren Sie sich Outputs (IPs ändern sich bei neuem Stack).
-- `AdministratorAccess` an der GitHub-Role nur zum Lernen; in echten Accounts einschränken.
+- `AdministratorAccess` am Deploy-Benutzer nur zum Lernen; in echten Accounts einschränken.
+- Access Keys sind langlebig – sorgfältig verwahren und bei Lab-Ende in IAM löschen.
 - Desktop-Daten in SQLite sichern Sie weiter lokal – die Cloud ist die Abgabe-/Ansichtsseite.
 
 ---
@@ -441,7 +448,7 @@ Actions → Run workflow → Option **`force_instance_refresh`** = true.
 ## Kurz: Reihenfolge zum Mitlesen
 
 1. Konsole öffnen, Region wählen  
-2. OIDC-Stack deployen → `RoleArn`  
+2. IAM-Benutzer + Access Keys anlegen  
 3. GitHub Secrets setzen  
 4. Workflow auf `main` starten  
 5. IPs/Outputs notieren  

@@ -1,6 +1,6 @@
 # Tätigkeitsbericht – AWS-Infrastruktur & CI/CD
 
-Technische Kurzreferenz; **konkrete Schritte** (inkl. Desktop on premises): [../Deploy_aws.md](../Deploy_aws.md).
+Technische Kurzreferenz; **konkrete Schritte**: [../Deploy_aws.md](../Deploy_aws.md).
 
 Zielbild: Bei Push auf `main` im Repo [Taetigkeitsbericht_Fullstack](https://github.com/carlosbrockmann-dot/Taetigkeitsbericht_Fullstack) werden Netzwerk (falls nötig), **Aurora DSQL** und zwei **EC2**-Instanzen (Backend / Frontend) angelegt oder aktualisiert. Der Datenbankverkehr läuft **privat** über die VPC (PrivateLink).
 
@@ -50,7 +50,7 @@ Wenn Sie zwingend Benutzername+Passwort im Connection-String brauchen, ist **Ama
 
 | Pfad | Inhalt |
 |------|--------|
-| `.github/workflows/deploy-aws.yml` | Pipeline bei Push auf `main` |
+| `.github/workflows/deploy-aws.yml` | Pipeline bei Push auf `main` (Access Keys) |
 | `infra/cloudformation/taetigkeitsbericht-aws.yml` | VPC, SG, EC2, DSQL, PrivateLink-Endpoint |
 | `infra/scripts/remote-bootstrap.sh` | User-Data / SSM: Runtime auf EC2 |
 | `infra/scripts/post-dsql-setup.sql` | Rolle `verwaltung` + Hinweise DB-Name |
@@ -59,13 +59,14 @@ Wenn Sie zwingend Benutzername+Passwort im Connection-String brauchen, ist **Ama
 
 | Secret | Beispiel / Bedeutung |
 |--------|----------------------|
-| `AWS_ROLE_ARN` | IAM-Role für GitHub OIDC (Output aus `infra/cloudformation/github-oidc.yml`) |
+| `AWS_ACCESS_KEY_ID` | Access Key ID des IAM-Deploy-Benutzers |
+| `AWS_SECRET_ACCESS_KEY` | Secret Access Key (nur in GitHub Secrets) |
 | `AWS_REGION` | z. B. `eu-central-1` (DSQL-Region prüfen) |
 | `JWT_KEY` | langes Secret für Backend-JWT |
 | `EC2_KEY_NAME` | optional, Name eines EC2-Key-Pairs (SSH); Deploy läuft primär über SSM |
 | `BACKEND_HOST_PUBLIC` | nach erstem Deploy: öffentliche Backend-URL für Frontend-Build (`VITE_GRAPHQL_URL`) |
 
-**Sandbox ohne Access Keys:** Keine `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`. Stattdessen OIDC – siehe [Deploy_aws.md](../Deploy_aws.md) Schritt 1.
+**Kein** `AWS_ROLE_ARN` / OIDC – die Pipeline nutzt Access Keys. Details: [Deploy_aws.md](../Deploy_aws.md).
 
 **Keine DB-Passwörter** in Secrets speichern und in YAML hardcoden, solange DSQL IAM nutzt.
 
