@@ -9,7 +9,7 @@ Parameters:
     Default: taetigkeitsbericht
   LatestAmiId:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
-    Default: /aws/service/ami-amazon-linux-2023/x86_64/standard
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
   InstanceType:
     Type: String
     Default: t3.small
