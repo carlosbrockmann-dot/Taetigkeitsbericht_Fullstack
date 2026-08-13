@@ -38,7 +38,7 @@ internal static class DatabaseStatusPage
             ? "Migrationen angewendet."
             : (string.IsNullOrWhiteSpace(migrationError) ? "" : "Migration fehlgeschlagen.");
         var target = useDsql
-            ? $"Aurora DSQL · Host {WebUtility.HtmlEncode(host ?? "(nicht gesetzt)")} · Datenbank {WebUtility.HtmlEncode(database)}"
+            ? $"Aurora DSQL · Host {WebUtility.HtmlEncode(host ?? "(nicht gesetzt)")} · Schema taetigkeitsbericht · Datenbank {WebUtility.HtmlEncode(database)}"
             : $"PostgreSQL · {WebUtility.HtmlEncode(host ?? "ConnectionStrings:DefaultConnection")} · Datenbank {WebUtility.HtmlEncode(database)}";
         if (!string.IsNullOrWhiteSpace(migrateNote))
         {

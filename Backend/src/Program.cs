@@ -35,13 +35,7 @@ if (databaseOptions.UseDsql)
 
     builder.Services.AddDsqlDataSource(
         databaseOptions.Host,
-        cfg =>
-        {
-            cfg.User = databaseOptions.User;
-            cfg.Database = databaseOptions.Database;
-            cfg.Port = databaseOptions.Port;
-            cfg.OrmPrefix = "efcore";
-        });
+        cfg => DsqlSchema.ApplyConnectionDefaults(cfg, databaseOptions, databaseOptions.User));
     builder.Services.AddDbContext<AppDbContext>((sp, options) =>
         options.UseDsql(sp, dsql => dsql.EnableIdentityColumns(65536)));
 }
