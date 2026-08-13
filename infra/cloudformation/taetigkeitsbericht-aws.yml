@@ -240,7 +240,15 @@ Resources:
               - Effect: Allow
                 Action:
                   - ssm:GetParameter
+                  - ssm:GetParameters
                 Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${ProjectName}/jwt-key"
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    kms:ViaService: !Sub "ssm.${AWS::Region}.amazonaws.com"
 
   Ec2InstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -375,6 +383,7 @@ Resources:
               Database__User=verwaltung
               Database__Database=postgres
               Database__MigrateOnStartup=true
+              DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=true
               AWS_REGION=${AWS::Region}
               AWS_DEFAULT_REGION=${AWS::Region}
               DSQL_ENDPOINT=${DsqlEndpoint}

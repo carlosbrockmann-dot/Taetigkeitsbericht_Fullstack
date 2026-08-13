@@ -242,12 +242,14 @@ jobs:
           cp infra/codedeploy/backend/scripts/*.sh dist/backend/scripts/
           cp infra/scripts/ec2-dsql-bootstrap.sh dist/backend/scripts/ec2-dsql-bootstrap.sh
           chmod +x dist/backend/scripts/*.sh
+          sed -i 's/\r$//' dist/backend/appspec.yml dist/backend/scripts/*.sh
           (cd dist/backend && zip -qr ../../artifacts/backend-codedeploy.zip .)
 
           cp -a Frontend/dist/. dist/frontend/dist/
           cp infra/codedeploy/frontend/appspec.yml dist/frontend/appspec.yml
           cp infra/codedeploy/frontend/scripts/*.sh dist/frontend/scripts/
           chmod +x dist/frontend/scripts/*.sh
+          sed -i 's/\r$//' dist/frontend/appspec.yml dist/frontend/scripts/*.sh
           (cd dist/frontend && zip -qr ../../artifacts/frontend-codedeploy.zip .)
 
       - name: Upload bundles to artifact bucket
@@ -288,7 +290,18 @@ jobs:
             exit 1
           fi
           echo "DeploymentId=$DEP_ID"
-          aws deploy wait deployment-successful --deployment-id "$DEP_ID"
+          if ! aws deploy wait deployment-successful --deployment-id "$DEP_ID"; then
+            echo "::error::Backend CodeDeploy $DEP_ID Failed"
+            aws deploy get-deployment --deployment-id "$DEP_ID" \
+              --query "deploymentInfo.{Status:status,Error:errorInformation}" --output json || true
+            TID=$(aws deploy list-deployment-targets --deployment-id "$DEP_ID" \
+              --query "targetIds[0]" --output text 2>/dev/null || true)
+            if [ -n "$TID" ] && [ "$TID" != "None" ]; then
+              aws deploy get-deployment-target --deployment-id "$DEP_ID" --target-id "$TID" \
+                --query "deploymentTarget.instanceTarget.{Status:status,LifecycleEvents:lifecycleEvents}" --output json || true
+            fi
+            exit 1
+          fi
 
       - name: Deploy Frontend via CodeDeploy
         env:
@@ -320,7 +333,18 @@ jobs:
             exit 1
           fi
           echo "DeploymentId=$DEP_ID"
-          aws deploy wait deployment-successful --deployment-id "$DEP_ID"
+          if ! aws deploy wait deployment-successful --deployment-id "$DEP_ID"; then
+            echo "::error::Frontend CodeDeploy $DEP_ID Failed"
+            aws deploy get-deployment --deployment-id "$DEP_ID" \
+              --query "deploymentInfo.{Status:status,Error:errorInformation}" --output json || true
+            TID=$(aws deploy list-deployment-targets --deployment-id "$DEP_ID" \
+              --query "targetIds[0]" --output text 2>/dev/null || true)
+            if [ -n "$TID" ] && [ "$TID" != "None" ]; then
+              aws deploy get-deployment-target --deployment-id "$DEP_ID" --target-id "$TID" \
+                --query "deploymentTarget.instanceTarget.{Status:status,LifecycleEvents:lifecycleEvents}" --output json || true
+            fi
+            exit 1
+          fi
 
       - name: Summary
         if: always()

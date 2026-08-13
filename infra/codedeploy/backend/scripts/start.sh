@@ -10,20 +10,42 @@ if [ -f /etc/taetigkeitsbericht/backend.env ]; then
   source /etc/taetigkeitsbericht/backend.env
   set +a
 fi
-REGION="${AWS_REGION:-${AWS_DEFAULT_REGION:-$REGION}}"
+REGION="${AWS_REGION:-${AWS_DEFAULT_REGION:-${REGION:-}}}"
 
-if aws ssm get-parameter --name "$PARAM" --with-decryption --region "$REGION" \
-     --query Parameter.Value --output text > /tmp/jwt.val 2>/dev/null; then
-  umask 077
-  printf 'Jwt__Key=%s\n' "$(cat /tmp/jwt.val)" > /etc/taetigkeitsbericht/jwt.env
-  rm -f /tmp/jwt.val
-  chmod 600 /etc/taetigkeitsbericht/jwt.env
-else
-  echo "Warnung: SSM-Parameter $PARAM nicht lesbar – JWT ggf. bereits in jwt.env"
+if ! aws ssm get-parameter --name "$PARAM" --with-decryption --region "$REGION" \
+     --query Parameter.Value --output text > /tmp/jwt.val; then
+  echo "FEHLER: SSM-Parameter $PARAM nicht lesbar (IAM kms:Decrypt / ssm:GetParameter?)" >&2
+  exit 1
 fi
+umask 077
+printf 'Jwt__Key=%s\n' "$(cat /tmp/jwt.val)" > /etc/taetigkeitsbericht/jwt.env
+rm -f /tmp/jwt.val
+chmod 600 /etc/taetigkeitsbericht/jwt.env
+
+mkdir -p /etc/systemd/system/taetigkeitsbericht-backend.service.d
+cat > /etc/systemd/system/taetigkeitsbericht-backend.service.d/override.conf <<'EOF'
+[Service]
+Environment=DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=true
+EOF
 
 systemctl daemon-reload
 systemctl enable taetigkeitsbericht-backend
 systemctl restart taetigkeitsbericht-backend
-sleep 8
-systemctl is-active taetigkeitsbericht-backend
+
+ok=0
+for i in $(seq 1 24); do
+  if systemctl is-active --quiet taetigkeitsbericht-backend; then
+    ok=1
+    break
+  fi
+  sleep 5
+done
+
+if [ "$ok" != "1" ]; then
+  echo "FEHLER: Backend-Dienst nicht active" >&2
+  systemctl status taetigkeitsbericht-backend --no-pager -l || true
+  journalctl -u taetigkeitsbericht-backend -n 120 --no-pager || true
+  exit 1
+fi
+
+echo "Backend-Dienst active"
