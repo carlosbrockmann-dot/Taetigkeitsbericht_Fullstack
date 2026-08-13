@@ -2,7 +2,7 @@
 
 Technische Kurzreferenz; **konkrete Schritte**: [../Deploy_aws.md](../Deploy_aws.md).
 
-Zielbild: GitHub Actions trennt **Infra** (CloudFormation, nur bei Bedarf) und **Apps** (CodeDeploy auf bestehende EC2). Aurora DSQL + PrivateLink. Datenbankverkehr bleibt privat.
+Zielbild: GitHub Actions stellt bei **jedem** Lauf sicher, dass VPC, EC2, DSQL und PrivateLink existieren, und rollt die Apps per CodeDeploy aus. Vorhandene Aurora DSQL wird **nicht** gelöscht.
 
 ## Architektur
 
@@ -48,10 +48,10 @@ Offizielle Hinweise zu PrivateLink: [Managing Aurora DSQL with PrivateLink](http
 
 ### Was die Pipeline automatisch macht
 
-1. CloudFormation (bei Infra-Änderungen): Cluster, PrivateLink, EC2, Artifact-Bucket, CodeDeploy  
+1. CloudFormation (jeder Lauf): fehlende Ressourcen neu; vorhandener Cluster bleibt (`Retain`, ggf. Import)  
 2. CodeDeploy Backend: `ec2-dsql-bootstrap.sh` (Rolle + `AWS IAM GRANT`; **kein** DROP)  
 3. Backend-Start: IAM-Token als `verwaltung`, nur ausstehende EF-Migrationen  
-4. DSQL: `DeletionProtectionEnabled` + `Retain`
+4. DSQL: `DeletionProtectionEnabled` + `Retain` – Pipeline löscht keinen existierenden Cluster
 
 Lokal bleibt `Database:UseDsql=false` und `ConnectionStrings:DefaultConnection` (PostgreSQL).
 
@@ -61,8 +61,9 @@ Wenn Sie zwingend Benutzername+Passwort im Connection-String brauchen, ist **Ama
 
 | Pfad | Inhalt |
 |------|--------|
-| `.github/workflows/deploy-aws.yml` | Infra (pfadgefiltert) + App-CodeDeploy |
+| `.github/workflows/deploy-aws.yml` | Jeder Lauf: Infra-Heal + App-CodeDeploy |
 | `infra/cloudformation/taetigkeitsbericht-aws.yml` | VPC, SG, EC2, DSQL, Bucket, CodeDeploy |
+| `infra/scripts/ensure-cloudformation-stack.sh` | Fehlende Infra nachziehen; DSQL nie löschen |
 | `infra/codedeploy/` | `appspec.yml` + Startskripte |
 | `infra/scripts/ec2-dsql-bootstrap.sh` | Rolle `verwaltung` + IAM GRANT (idempotent) |
 | `infra/scripts/post-dsql-setup.sql` | Kurz-Dokumentation der SQL-Schritte |
@@ -101,7 +102,7 @@ Sonst scheitert der Workflow mit `AccessDenied` (z. B. `cloudformation:Describ
 2. IAM-Deploy-Benutzer mit Rechten (Sandbox: `AdministratorAccess`) + Access Keys.
 3. **Repository secrets** in GitHub setzen.
 4. Optional EC2 Key Pair anlegen.
-5. Push auf `main` → zuerst Infra (UserData/CodeDeploy-Agent), dann App-CodeDeploy.
+5. Push auf `main` → Infra vollständig (fehlendes wird angelegt) und App-CodeDeploy.
 6. Frontend-URL kommt aus der Backend-EIP; `BACKEND_HOST_PUBLIC` nur bei eigener Domain.
 
 ## Lokal Stack testen

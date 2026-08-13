@@ -28,12 +28,15 @@ public class BackendWebAppFactoryTests : IClassFixture<WebApplicationFactory<Pro
     }
 
     [Fact]
-    public async Task Root_liefert_backend_text()
+    public async Task Root_liefert_html_statusseite()
     {
         var response = await _client.GetAsync("/");
         var body = await response.Content.ReadAsStringAsync();
 
-        response.IsSuccessStatusCode.Should().BeTrue();
         body.Should().Contain("Taetigkeitsbericht.Backend");
+        body.Should().Contain("<!DOCTYPE html>");
+        body.Should().Contain("Datenbank nicht erreichbar");
+        response.StatusCode.Should().Be(System.Net.HttpStatusCode.ServiceUnavailable);
+        response.Content.Headers.ContentType!.MediaType.Should().Be("text/html");
     }
 }

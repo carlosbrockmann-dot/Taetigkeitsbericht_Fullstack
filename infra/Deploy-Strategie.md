@@ -17,9 +17,10 @@ Infra und App sind getrennt. Apps laufen auf EC2 über **festen S3-Bucket + Code
 
 | Push | Was passiert |
 |------|----------------|
-| Nur `Backend/` / `Frontend/` / `infra/codedeploy/` | CodeDeploy, **keine** neuen EC2 |
-| `infra/cloudformation` oder `infra/scripts` | CloudFormation, danach App-Deploy (falls Instanzen ersetzt wurden) |
-| Erster Lauf nach dem Template-Wechsel | EC2 einmal neu (UserData mit CodeDeploy-Agent), dann Software per CodeDeploy |
+| Jeder Push auf `main` | CloudFormation-Heal (fehlende VPC/EC2/DSQL/Endpoint nachziehen) **und** CodeDeploy |
+| Gesunde Infra, nur App-Änderung | Leeres CFN-Changeset, danach CodeDeploy; **keine** neuen EC2 |
+| Instanzen/VPC in der Konsole gelöscht | Nächster Lauf legt sie neu an |
+| DSQL existiert | Wird **nicht** gelöscht und nicht ersetzt; ggf. in den Stack importiert |
 
 DSQL: Cluster `Retain` + Deletion Protection. Bootstrap idempotent in CodeDeploy AfterInstall. Nur `MigrateAsync`.
 
@@ -218,7 +219,7 @@ Erledigt im Repo:
 2. Self-contained Backend-Publish  
 3. CodeDeploy-Apps + Deployment Groups (Tags `Role=backend` / `Role=frontend`)  
 4. App-Job: `create-deployment` statt `send-command`  
-5. Infra-Job pfadgefiltert  
+5. Infra-Job **bei jedem Lauf** (Heal: fehlende Ressourcen neu, DSQL nie löschen)  
 6. DSQL-Bootstrap in AfterInstall (idempotent), nicht in der GitHub-SSM-Liste  
 7. `VITE_GRAPHQL_URL` und CORS aus EIPs  
 

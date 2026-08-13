@@ -253,8 +253,8 @@ git push origin main
 
 ### 4.3 Lauf beobachten
 
-1. Job **CloudFormation** (nur bei Infra-Änderungen oder manuell).
-2. Job **Build & CodeDeploy** (App-Code oder nach Infra).
+1. Job **CloudFormation** (immer: fehlende Infra nachziehen, vorhandene DSQL nicht löschen).
+2. Job **Build & CodeDeploy** (Backend + Frontend ausrollen).
 3. Am Ende die **Summary** des Runs lesen (IPs, Artifact-Bucket).
 
 Dauer: Infra oft 10–20+ Minuten; reines App-Deploy kürzer (Build + CodeDeploy).
@@ -268,7 +268,7 @@ CloudFormation → Stack **`taetigkeitsbericht`** → **Outputs**:
 | Output | Bedeutung |
 |--------|-----------|
 | `FrontendPublicIp` | Browser-URL: `http://<IP>/` |
-| `BackendPublicIp` | API: `http://<IP>:5108/graphql` |
+| `BackendPublicIp` | Status: `http://<IP>:5108/` · API: `http://<IP>:5108/graphql` |
 | `DsqlEndpoint` | Hostname für DB-Verbindungen |
 | `Ec2RoleArn` | Für `AWS IAM GRANT` der DB-Rolle `verwaltung` |
 | `ArtifactBucketName` | S3-Bucket für CodeDeploy-Zips (wird nicht gelöscht) |
@@ -286,17 +286,19 @@ Ohne CLI reicht die Konsole.
 
 ## Schritt 5 – Was die Pipeline konkret macht
 
-Zwei Jobs, **getrennt**:
+Zwei Jobs, **bei jedem Push auf `main` beide**:
 
-### Infra (`deploy-infra`) – nicht bei jedem UI-/API-Commit
-
-Nur wenn sich `infra/cloudformation`, `infra/scripts` oder der Workflow ändern, oder per **Run workflow**.
+### Infra (`deploy-infra`) – immer, damit nichts Fehledes übrig bleibt
 
 1. Access Keys laden  
-2. CloudFormation: VPC, DSQL + PrivateLink, zwei EC2 (EIP), Artifact-Bucket, CodeDeploy-Apps, IAM  
-3. UserData installiert **CodeDeploy-Agent** (SSM-Agent nur noch für Betrieb/Debug)
+2. Skript `infra/scripts/ensure-cloudformation-stack.sh`:
+   - CloudFormation-Stack anlegen oder aktualisieren
+   - **Fehlende** VPC, EC2, EIPs, PrivateLink **neu anlegen** (auch wenn sie in der Konsole gelöscht wurden)
+   - **Aurora DSQL nie löschen**: existiert der Cluster, bleibt er (`Retain` + Deletion Protection, ggf. Import ins Stack)
+   - Fehlt der Cluster wirklich, wird **ein** neuer angelegt
+3. UserData installiert **CodeDeploy-Agent** auf neuen EC2
 
-### Apps (`deploy-apps`) – Programme auf den bestehenden EC2
+### Apps (`deploy-apps`) – Programme auf den EC2
 
 1. Stack-Outputs lesen (Bucket, EIPs)  
 2. `JWT_KEY` nach SSM Parameter `/taetigkeitsbericht/jwt-key`  
@@ -305,7 +307,7 @@ Nur wenn sich `infra/cloudformation`, `infra/scripts` oder der Workflow ändern,
 5. **CodeDeploy** auf die Instanzen mit Tag `Role=backend` / `Role=frontend`  
 6. Backend AfterInstall: idempotenter DSQL-Bootstrap (kein DROP) + Start; `MigrateAsync` beim Prozessstart  
 
-Die EC2-Instanzen werden dabei **nicht** neu angelegt.
+Bestehende, gesunde EC2 werden dabei **nicht** ersetzt – nur wenn Instanzen fehlen oder `force_instance_refresh` gesetzt ist.
 
 ---
 
@@ -317,7 +319,9 @@ Beim Backend-CodeDeploy (**AfterInstall**, nicht per SSM-Skriptliste):
 2. **Backend-Start** mit `Database__UseDsql=true`  
 3. **`Database__MigrateOnStartup=true`**: nur ausstehende EF-Migrationen  
 
-**Besteht der DSQL-Cluster bereits**, bleibt er erhalten (`Retain` + Deletion Protection).
+**Besteht der DSQL-Cluster bereits** (im Stack oder mit Name-Tag `taetigkeitsbericht-fullstack-dsql`), bleibt er erhalten. Die Pipeline ruft **kein** `delete-cluster` auf und ersetzt keinen lebenden Cluster.
+
+Wurde der Cluster in der Konsole gelöscht, legt der nächste Pipeline-Lauf **einen neuen** an (leere DB, danach Bootstrap + Migrationen).
 
 Manuelles SQL (Fallback): `infra/scripts/post-dsql-setup.sql`.
 
@@ -393,11 +397,13 @@ Nur zum Testen mit Self-Signed: `verify_ssl = false` (nicht für Produktion).
 
 Bei **jedem Push auf `main`** (oder manuellem Run):
 
-1. Infra-Stack aktualisieren (bestehende VPC bleibt in der Regel erhalten).
-2. Neu bauen und per SSM auf EC2 ausrollen.
+1. Infra prüfen und fehlende Teile (VPC, EC2, DSQL falls weg, PrivateLink) wiederherstellen. Vorhandene DSQL bleibt.
+2. Neu bauen und per CodeDeploy auf EC2 ausrollen.
 
-**Komplette EC2-Neuinstanzen:**  
+**Komplette EC2-Neuinstanzen** trotz vorhandener VMs:  
 Actions → Run workflow → Option **`force_instance_refresh`** = true.
+
+**Instanzen, VPC oder DSQL in der Konsole gelöscht:** einfach Pipeline auf `main` laufen lassen – sie baut nach. DSQL nur neu, wenn wirklich kein Cluster mehr da ist.
 
 **Sandbox abgelaufen:** Alle Ressourcen weg. IAM-Benutzer/Keys prüfen (ggf. neu anlegen), App-Stack erneut deployen (Schritt 4), Secrets aktualisieren.
 
@@ -438,7 +444,8 @@ Actions → Run workflow → Option **`force_instance_refresh`** = true.
 | CloudFormation IAM capability | Haken „acknowledge IAM resources“ setzen (falls manuell) |
 | SSM Instance not Online | 2–5 Min warten; Instance Profile prüfen; Instanz neu starten |
 | Frontend ohne Daten | `BACKEND_HOST_PUBLIC`, CORS, JWT/Token, Browser-Konsole/Netzwerk-Tab |
-| Backend ohne DB | PrivateLink, SG 5432, IAM `dsql:DbConnect*`, Token statt Passwort |
+| EC2/VPC/DSQL in der Konsole gelöscht | Nächster Pipeline-Lauf stellt VPC/EC2/PrivateLink wieder her. **DSQL wird nicht gelöscht**; nur neu angelegt, wenn kein Cluster mehr existiert |
+| Zwei DSQL-Cluster mit gleichem Name-Tag | Pipeline importiert/verwendet einen, löscht die anderen nicht |
 | Desktop erreicht Backend nicht | Öffentliche IP, SG, Firmen-Firewall, `base_url` Tippfehler, HTTP vs HTTPS |
 | Sandbox leer nach Lab-Ende | Stacks und ggf. IAM-Keys/Secrets neu aufsetzen |
 

@@ -165,11 +165,18 @@ var app = builder.Build();
 
 if (databaseOptions.MigrateOnStartup)
 {
-    using var scope = app.Services.CreateScope();
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    app.Logger.LogInformation("Führe EF-Core-Migrationen aus…");
-    await db.Database.MigrateAsync();
-    app.Logger.LogInformation("Migrationen abgeschlossen.");
+    try
+    {
+        using var scope = app.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        app.Logger.LogInformation("Führe EF-Core-Migrationen aus…");
+        await db.Database.MigrateAsync();
+        app.Logger.LogInformation("Migrationen abgeschlossen.");
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogError(ex, "Datenbank nicht erreichbar oder Migration fehlgeschlagen. Dienst bleibt aktiv (Statusseite unter /).");
+    }
 }
 
 var enableHttpsRedirection = app.Configuration.GetValue("HttpsRedirection:Enabled", false);
@@ -214,10 +221,55 @@ app.MapGraphQL("/graphql").WithOptions(o =>
     o.EnableSchemaRequests = true; // Schema per /graphql?sdl
 });
 
-app.MapGet("/", () => app.Environment.IsDevelopment()
-    ? Results.Redirect("/graphiql")
-    : Results.Text("Taetigkeitsbericht.Backend"));
+app.MapGet("/", async (IServiceProvider services, CancellationToken cancellationToken) =>
+{
+    var hostLabel = databaseOptions.UseDsql
+        ? databaseOptions.Host
+        : "(ConnectionStrings:DefaultConnection)";
+    var dbName = databaseOptions.Database;
+
+    try
+    {
+        using var scope = services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var (ok, error) = await CheckDatabaseAsync(db, cancellationToken);
+        return DatabaseStatusPage.ToResult(
+            ok,
+            DatabaseStatusPage.Render(ok, error, databaseOptions.UseDsql, hostLabel, dbName));
+    }
+    catch (Exception ex)
+    {
+        var html = DatabaseStatusPage.Render(
+            false,
+            ex.GetBaseException().Message,
+            databaseOptions.UseDsql,
+            hostLabel,
+            dbName);
+        return DatabaseStatusPage.ToResult(false, html);
+    }
+});
 
 app.Run();
+
+static async Task<(bool Ok, string? Error)> CheckDatabaseAsync(AppDbContext db, CancellationToken cancellationToken)
+{
+    try
+    {
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        cts.CancelAfter(TimeSpan.FromSeconds(3));
+        var connected = await db.Database.CanConnectAsync(cts.Token);
+        return connected
+            ? (true, null)
+            : (false, "CanConnect hat false geliefert (Host/Port/Anmeldung/Netzwerk).");
+    }
+    catch (OperationCanceledException)
+    {
+        return (false, "Zeitüberschreitung: Datenbank antwortet nicht innerhalb von 3 Sekunden.");
+    }
+    catch (Exception ex)
+    {
+        return (false, ex.GetBaseException().Message);
+    }
+}
 
 public partial class Program;

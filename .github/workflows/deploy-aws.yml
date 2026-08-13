@@ -27,34 +27,12 @@ env:
   PROJECT_NAME: taetigkeitsbericht
 
 jobs:
-  detect:
-    name: Änderungen erkennen
-    runs-on: ubuntu-latest
-    outputs:
-      infra: ${{ steps.filter.outputs.infra }}
-      apps: ${{ steps.filter.outputs.apps }}
-    steps:
-      - uses: actions/checkout@v5
-      - uses: dorny/paths-filter@v4
-        id: filter
-        with:
-          filters: |
-            infra:
-              - "infra/cloudformation/**"
-              - ".github/workflows/deploy-aws.yml"
-            apps:
-              - "Backend/**"
-              - "Frontend/**"
-              - "infra/codedeploy/**"
-              - "infra/scripts/**"
-              - ".github/workflows/deploy-aws.yml"
-
   deploy-infra:
     name: CloudFormation
-    needs: detect
+    timeout-minutes: 90
     if: >
-      (github.event_name == 'workflow_dispatch' && inputs.deploy_infra) ||
-      (github.event_name == 'push' && needs.detect.outputs.infra == 'true')
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_dispatch' && inputs.deploy_infra)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -90,51 +68,30 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Deploy / update CloudFormation stack
+      - name: Ensure stack (fehlende Ressourcen neu, DSQL nie löschen)
         env:
           FORCE_REFRESH: ${{ github.event_name == 'workflow_dispatch' && inputs.force_instance_refresh || 'false' }}
+          KEY_NAME: ${{ secrets.EC2_KEY_NAME }}
+          TEMPLATE_FILE: infra/cloudformation/taetigkeitsbericht-aws.yml
         run: |
           set -euo pipefail
-          PARAMS=(
-            "ProjectName=${PROJECT_NAME}"
-            "ForceInstanceRefresh=${FORCE_REFRESH}"
-          )
-          if [ -n "${{ secrets.EC2_KEY_NAME }}" ]; then
-            PARAMS+=("KeyName=${{ secrets.EC2_KEY_NAME }}")
-          fi
-
+          sed -i 's/\r$//' infra/scripts/ensure-cloudformation-stack.sh
+          chmod +x infra/scripts/ensure-cloudformation-stack.sh
           echo "Region=${AWS_REGION} Stack=${STACK_NAME}"
           aws cloudformation describe-stacks --stack-name "${STACK_NAME}" \
             --query "Stacks[0].[StackName,StackStatus]" --output text 2>/dev/null \
             || echo "Stack existiert noch nicht (Create)."
-
-          if ! aws cloudformation deploy \
-            --stack-name "${STACK_NAME}" \
-            --template-file infra/cloudformation/taetigkeitsbericht-aws.yml \
-            --capabilities CAPABILITY_NAMED_IAM \
-            --no-fail-on-empty-changeset \
-            --parameter-overrides "${PARAMS[@]}"; then
-            {
-              echo "::error::CloudFormation deploy fehlgeschlagen"
-              echo "=== Stack-Status ==="
-              aws cloudformation describe-stacks --stack-name "${STACK_NAME}" \
-                --query "Stacks[0].[StackStatus,StackStatusReason]" --output text 2>/dev/null || echo "(kein Stack)"
-              echo "=== Events (text) ==="
-              aws cloudformation describe-stack-events --stack-name "${STACK_NAME}" \
-                --output text 2>/dev/null | head -n 40 || true
-            } | tee "$GITHUB_STEP_SUMMARY" >&2
-            exit 1
-          fi
+          bash infra/scripts/ensure-cloudformation-stack.sh
 
   deploy-apps:
     name: Build & CodeDeploy
-    needs: [detect, deploy-infra]
+    needs: [deploy-infra]
     if: >
       always() &&
       (needs.deploy-infra.result == 'success' || needs.deploy-infra.result == 'skipped') &&
       (
-        (github.event_name == 'workflow_dispatch' && inputs.deploy_apps) ||
-        (github.event_name == 'push' && (needs.detect.outputs.apps == 'true' || needs.detect.outputs.infra == 'true'))
+        github.event_name == 'push' ||
+        (github.event_name == 'workflow_dispatch' && inputs.deploy_apps)
       )
     runs-on: ubuntu-latest
     steps:
@@ -446,4 +403,4 @@ jobs:
           echo "- Backend:  http://${{ steps.stack.outputs.backend_ip }}:5108/graphql" >> "$GITHUB_STEP_SUMMARY"
           echo "- Artifact-Bucket: ${{ steps.stack.outputs.bucket }}" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "Ausroll-Kanal: CodeDeploy (keine SSM-Skriptliste). DSQL bleibt erhalten; Bootstrap idempotent in AfterInstall; nur EF-Migrationen beim Backend-Start." >> "$GITHUB_STEP_SUMMARY"
+          echo "Ausroll-Kanal: CodeDeploy. Jeder Lauf legt fehlende Infra neu an; vorhandene Aurora DSQL wird nicht gelöscht (Retain + Import)." >> "$GITHUB_STEP_SUMMARY"

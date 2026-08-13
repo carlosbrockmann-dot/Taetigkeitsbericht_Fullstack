@@ -22,14 +22,43 @@ Parameters:
     Default: "false"
     AllowedValues: ["true", "false"]
     Description: When true, bumps UserData so EC2 resources are replaced
+  ProvisionCompute:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: >
+      VPC, Subnets, EC2, EIPs, Security Groups. Pipeline setzt false nur,
+      um fehlende (außerhalb des Stacks gelöschte) Netz-/Compute-Ressourcen
+      aus dem Stack zu nehmen und danach neu anzulegen.
+  ProvisionDsql:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: >
+      Aurora-DSQL-Cluster im Stack. false nur wenn der Cluster in AWS bereits
+      weg ist (Unregister via DeletionPolicy Retain – kein Delete). Existierende
+      Cluster werden nie gelöscht.
+  ProvisionDsqlEndpoint:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: PrivateLink-Endpoint. false nur zum Unregister wenn der Endpoint in AWS fehlt.
 
 Conditions:
   HasKeyName: !Not [!Equals [!Ref KeyName, ""]]
   RefreshInstances: !Equals [!Ref ForceInstanceRefresh, "true"]
+  CreateCompute: !Equals [!Ref ProvisionCompute, "true"]
+  CreateDsql: !Equals [!Ref ProvisionDsql, "true"]
+  CreateDsqlEndpoint: !And
+    - !Condition CreateCompute
+    - !Condition CreateDsql
+    - !Equals [!Ref ProvisionDsqlEndpoint, "true"]
 
 Resources:
   Vpc:
     Type: AWS::EC2::VPC
+    Condition: CreateCompute
+    DeletionPolicy: Retain
     Properties:
       CidrBlock: 10.20.0.0/16
       EnableDnsSupport: true
@@ -40,6 +69,8 @@ Resources:
 
   InternetGateway:
     Type: AWS::EC2::InternetGateway
+    Condition: CreateCompute
+    DeletionPolicy: Retain
     Properties:
       Tags:
         - Key: Name
@@ -47,12 +78,16 @@ Resources:
 
   AttachGateway:
     Type: AWS::EC2::VPCGatewayAttachment
+    Condition: CreateCompute
+    DeletionPolicy: Retain
     Properties:
       VpcId: !Ref Vpc
       InternetGatewayId: !Ref InternetGateway
 
   PublicSubnetA:
     Type: AWS::EC2::Subnet
+    Condition: CreateCompute
+    DeletionPolicy: Retain
     Properties:
       VpcId: !Ref Vpc
       CidrBlock: 10.20.1.0/24
@@ -64,6 +99,8 @@ Resources:
 
   PublicSubnetB:
     Type: AWS::EC2::Subnet
+    Condition: CreateCompute
+    DeletionPolicy: Retain
     Properties:
       VpcId: !Ref Vpc
       CidrBlock: 10.20.2.0/24
@@ -75,6 +112,8 @@ Resources:
 
   PrivateSubnetA:
     Type: AWS::EC2::Subnet
+    Condition: CreateCompute
+    DeletionPolicy: Retain
     Properties:
       VpcId: !Ref Vpc
       CidrBlock: 10.20.11.0/24
@@ -85,6 +124,8 @@ Resources:
 
   PrivateSubnetB:
     Type: AWS::EC2::Subnet
+    Condition: CreateCompute
+    DeletionPolicy: Retain
     Properties:
       VpcId: !Ref Vpc
       CidrBlock: 10.20.12.0/24
@@ -95,6 +136,8 @@ Resources:
 
   PublicRouteTable:
     Type: AWS::EC2::RouteTable
+    Condition: CreateCompute
+    DeletionPolicy: Retain
     Properties:
       VpcId: !Ref Vpc
       Tags:
@@ -103,7 +146,9 @@ Resources:
 
   PublicRoute:
     Type: AWS::EC2::Route
+    Condition: CreateCompute
     DependsOn: AttachGateway
+    DeletionPolicy: Retain
     Properties:
       RouteTableId: !Ref PublicRouteTable
       DestinationCidrBlock: 0.0.0.0/0
@@ -111,12 +156,16 @@ Resources:
 
   PublicSubnetARouteAssoc:
     Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreateCompute
+    DeletionPolicy: Retain
     Properties:
       SubnetId: !Ref PublicSubnetA
       RouteTableId: !Ref PublicRouteTable
 
   PublicSubnetBRouteAssoc:
     Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreateCompute
+    DeletionPolicy: Retain
     Properties:
       SubnetId: !Ref PublicSubnetB
       RouteTableId: !Ref PublicRouteTable
@@ -124,6 +173,8 @@ Resources:
   # --- Security Groups ---
   SgFrontend:
     Type: AWS::EC2::SecurityGroup
+    Condition: CreateCompute
+    DeletionPolicy: Retain
     Properties:
       GroupDescription: Frontend HTTP(S)
       VpcId: !Ref Vpc
@@ -142,6 +193,8 @@ Resources:
 
   SgBackend:
     Type: AWS::EC2::SecurityGroup
+    Condition: CreateCompute
+    DeletionPolicy: Retain
     Properties:
       GroupDescription: Backend GraphQL HTTP(S)
       VpcId: !Ref Vpc
@@ -164,6 +217,8 @@ Resources:
 
   SgDsqlEndpoint:
     Type: AWS::EC2::SecurityGroup
+    Condition: CreateCompute
+    DeletionPolicy: Retain
     Properties:
       GroupDescription: Aurora DSQL PrivateLink endpoint (5432 from Backend)
       VpcId: !Ref Vpc
@@ -310,6 +365,7 @@ Resources:
   # (nur idempotenter Bootstrap + EF-Migrationen). Schutz gegen versehentliches Löschen:
   DsqlCluster:
     Type: AWS::DSQL::Cluster
+    Condition: CreateDsql
     DeletionPolicy: Retain
     UpdateReplacePolicy: Retain
     Properties:
@@ -322,7 +378,9 @@ Resources:
 
   DsqlVpcEndpoint:
     Type: AWS::EC2::VPCEndpoint
+    Condition: CreateDsqlEndpoint
     DependsOn: DsqlCluster
+    DeletionPolicy: Retain
     Properties:
       VpcId: !Ref Vpc
       ServiceName: !GetAtt DsqlCluster.VpcEndpointServiceName
@@ -337,9 +395,10 @@ Resources:
   # --- EC2 Backend / Frontend ---
   BackendInstance:
     Type: AWS::EC2::Instance
+    Condition: CreateCompute
     DependsOn:
       - AttachGateway
-      - DsqlVpcEndpoint
+    DeletionPolicy: Retain
     Properties:
       InstanceType: !Ref InstanceType
       ImageId: !Ref LatestAmiId
@@ -408,14 +467,16 @@ Resources:
               UNITEOF
               systemctl daemon-reload
               # Refresh marker: ${ForceInstanceRefresh}
-            - DsqlEndpoint: !GetAtt DsqlCluster.Endpoint
-              FrontendEip: !Ref FrontendEip
+            - DsqlEndpoint: !If [CreateDsql, !GetAtt DsqlCluster.Endpoint, pending-dsql]
+              FrontendEip: !If [CreateCompute, !Ref FrontendEip, "0.0.0.0"]
               Ec2RoleArn: !GetAtt Ec2Role.Arn
               ForceInstanceRefresh: !Ref ForceInstanceRefresh
 
   FrontendInstance:
     Type: AWS::EC2::Instance
+    Condition: CreateCompute
     DependsOn: AttachGateway
+    DeletionPolicy: Retain
     Properties:
       InstanceType: !Ref InstanceType
       ImageId: !Ref LatestAmiId
@@ -454,7 +515,9 @@ Resources:
   # Stabile öffentliche IPs (GetAtt Instance.PublicIp schlägt fehl, wenn keine Public IP existiert)
   BackendEip:
     Type: AWS::EC2::EIP
+    Condition: CreateCompute
     DependsOn: AttachGateway
+    DeletionPolicy: Retain
     Properties:
       Domain: vpc
       Tags:
@@ -463,13 +526,17 @@ Resources:
 
   BackendEipAssociation:
     Type: AWS::EC2::EIPAssociation
+    Condition: CreateCompute
+    DeletionPolicy: Retain
     Properties:
       AllocationId: !GetAtt BackendEip.AllocationId
       InstanceId: !Ref BackendInstance
 
   FrontendEip:
     Type: AWS::EC2::EIP
+    Condition: CreateCompute
     DependsOn: AttachGateway
+    DeletionPolicy: Retain
     Properties:
       Domain: vpc
       Tags:
@@ -478,29 +545,39 @@ Resources:
 
   FrontendEipAssociation:
     Type: AWS::EC2::EIPAssociation
+    Condition: CreateCompute
+    DeletionPolicy: Retain
     Properties:
       AllocationId: !GetAtt FrontendEip.AllocationId
       InstanceId: !Ref FrontendInstance
 
 Outputs:
   VpcId:
+    Condition: CreateCompute
     Value: !Ref Vpc
   BackendInstanceId:
+    Condition: CreateCompute
     Value: !Ref BackendInstance
   FrontendInstanceId:
+    Condition: CreateCompute
     Value: !Ref FrontendInstance
   BackendPublicIp:
+    Condition: CreateCompute
     Description: Elastic IP of backend EC2
     Value: !Ref BackendEip
   FrontendPublicIp:
+    Condition: CreateCompute
     Description: Elastic IP of frontend EC2
     Value: !Ref FrontendEip
   DsqlClusterArn:
+    Condition: CreateDsql
     Value: !Ref DsqlCluster
   DsqlEndpoint:
+    Condition: CreateDsql
     Description: Cluster endpoint hostname (connect via PrivateLink private DNS in VPC)
     Value: !GetAtt DsqlCluster.Endpoint
   DsqlVpcEndpointServiceName:
+    Condition: CreateDsql
     Value: !GetAtt DsqlCluster.VpcEndpointServiceName
   Ec2RoleArn:
     Description: Link DB role verwaltung to this IAM role via AWS IAM GRANT

@@ -7,6 +7,7 @@ ASP.NET-Core-API mit **Hot Chocolate** GraphQL zum Empfang und zur Speicherung h
 | Projektordner | `src/` |
 | Target Framework | **net10.0** (siehe `Backend/global.json` für SDK-Pin) |
 | Öffentliche API | **GraphQL** (`POST /graphql`) |
+| Status | `GET /` HTML: Datenbank erreichbar (200) oder nicht (503) |
 | REST | nur `GET /api/auth/confirm-email` (Link aus der Bestätigungs-Mail) |
 | UI (Dev) | GraphiQL unter `/graphiql` – Banana Cake Pop ist deaktiviert |
 
@@ -61,7 +62,7 @@ dotnet ef database update --project src
 dotnet run --project src --launch-profile http
 ```
 
-- URL: **http://localhost:5108**
+- URL: **http://localhost:5108** (Statusseite: Datenbank erreichbar ja/nein)
 - GraphiQL: **http://localhost:5108/graphiql**
 
 ### HTTPS (Dev-Zertifikat)
