@@ -293,6 +293,18 @@ jobs:
           aws s3 cp artifacts/backend-codedeploy.zip "s3://${BUCKET}/backend.zip"
           aws s3 cp artifacts/frontend-codedeploy.zip "s3://${BUCKET}/frontend.zip"
 
+      - name: Wait for EC2 instance status
+        run: |
+          set -euo pipefail
+          get() { aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
+            --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" --output text; }
+          BE="$(get BackendInstanceId)"
+          FE="$(get FrontendInstanceId)"
+          echo "Warte auf instance-status-ok: $BE $FE"
+          aws ec2 wait instance-status-ok --instance-ids "$BE" "$FE"
+          echo "Instanzen ok – 45s für CodeDeploy-Agent-Polling"
+          sleep 45
+
       - name: Deploy Backend via CodeDeploy
         env:
           BUCKET: ${{ steps.stack.outputs.bucket }}
@@ -301,13 +313,15 @@ jobs:
           set -euo pipefail
           last=""
           DEP_ID=""
-          for i in $(seq 1 30); do
+          for i in $(seq 1 15); do
             set +e
             last=$(aws deploy create-deployment \
               --application-name "$APP" \
               --deployment-group-name backend \
               --s3-location "bucket=${BUCKET},key=backend.zip,bundleType=zip" \
               --description "Backend ${GITHUB_SHA}" \
+              --file-exists-behavior OVERWRITE \
+              --ignore-application-stop-failures \
               --query deploymentId --output text 2>&1)
             rc=$?
             set -e
@@ -315,7 +329,7 @@ jobs:
               DEP_ID="$last"
               break
             fi
-            echo "Versuch $i/30: $last"
+            echo "Versuch $i/15: $last"
             sleep 20
           done
           if [ -z "$DEP_ID" ]; then
@@ -346,13 +360,15 @@ jobs:
           set -euo pipefail
           last=""
           DEP_ID=""
-          for i in $(seq 1 30); do
+          for i in $(seq 1 15); do
             set +e
             last=$(aws deploy create-deployment \
               --application-name "$APP" \
               --deployment-group-name frontend \
               --s3-location "bucket=${BUCKET},key=frontend.zip,bundleType=zip" \
               --description "Frontend ${GITHUB_SHA}" \
+              --file-exists-behavior OVERWRITE \
+              --ignore-application-stop-failures \
               --query deploymentId --output text 2>&1)
             rc=$?
             set -e
@@ -360,7 +376,7 @@ jobs:
               DEP_ID="$last"
               break
             fi
-            echo "Versuch $i/30: $last"
+            echo "Versuch $i/15: $last"
             sleep 20
           done
           if [ -z "$DEP_ID" ]; then
@@ -370,14 +386,10 @@ jobs:
           echo "DeploymentId=$DEP_ID"
           if ! aws deploy wait deployment-successful --deployment-id "$DEP_ID"; then
             echo "::error::Frontend CodeDeploy $DEP_ID Failed"
-            aws deploy get-deployment --deployment-id "$DEP_ID" \
-              --query "deploymentInfo.{Status:status,Error:errorInformation}" --output json || true
-            TID=$(aws deploy list-deployment-targets --deployment-id "$DEP_ID" \
-              --query "targetIds[0]" --output text 2>/dev/null || true)
-            if [ -n "$TID" ] && [ "$TID" != "None" ]; then
-              aws deploy get-deployment-target --deployment-id "$DEP_ID" --target-id "$TID" \
-                --query "deploymentTarget.instanceTarget.{Status:status,LifecycleEvents:lifecycleEvents}" --output json || true
-            fi
+            aws deploy get-deployment --deployment-id "$DEP_ID" --output json || true
+            for iid in $(aws deploy list-deployment-instances --deployment-id "$DEP_ID" --query "instancesList[]" --output text 2>/dev/null || true); do
+              aws deploy get-deployment-instance --deployment-id "$DEP_ID" --instance-id "$iid" --output json || true
+            done
             exit 1
           fi
 

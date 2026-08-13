@@ -361,10 +361,9 @@ Resources:
             - |
               #!/bin/bash
               set -eux
-              dnf update -y || yum update -y
-              dnf install -y ruby wget tar gzip amazon-ssm-agent postgresql15 \
-                || yum install -y ruby wget tar gzip amazon-ssm-agent postgresql15 \
-                || dnf install -y ruby wget tar gzip amazon-ssm-agent postgresql
+              # Kein "dnf update -y": blockiert den CodeDeploy-Agent (Reboot/Timeout).
+              dnf install -y ruby wget tar gzip amazon-ssm-agent \
+                || yum install -y ruby wget tar gzip amazon-ssm-agent
               systemctl enable amazon-ssm-agent || true
               systemctl restart amazon-ssm-agent || true
               cd /tmp
@@ -372,8 +371,9 @@ Resources:
                 || wget -q "https://aws-codedeploy-${AWS::Region}.s3.amazonaws.com/latest/install" -O /tmp/codedeploy-install
               chmod +x /tmp/codedeploy-install
               /tmp/codedeploy-install auto
-              systemctl enable codedeploy-agent || true
-              systemctl start codedeploy-agent || true
+              systemctl enable codedeploy-agent
+              systemctl start codedeploy-agent
+              dnf install -y postgresql15 || yum install -y postgresql15 || dnf install -y postgresql || true
               mkdir -p /opt/taetigkeitsbericht/backend /opt/taetigkeitsbericht/scripts /etc/taetigkeitsbericht
               cat > /etc/taetigkeitsbericht/backend.env <<'ENVEOF'
               ASPNETCORE_ENVIRONMENT=Production
@@ -435,7 +435,6 @@ Resources:
         Fn::Base64: !Sub |
           #!/bin/bash
           set -eux
-          dnf update -y || yum update -y
           dnf install -y nginx ruby wget tar gzip amazon-ssm-agent \
             || yum install -y nginx ruby wget tar gzip amazon-ssm-agent
           systemctl enable amazon-ssm-agent || true
@@ -445,8 +444,8 @@ Resources:
             || wget -q "https://aws-codedeploy-${AWS::Region}.s3.amazonaws.com/latest/install" -O /tmp/codedeploy-install
           chmod +x /tmp/codedeploy-install
           /tmp/codedeploy-install auto
-          systemctl enable codedeploy-agent || true
-          systemctl start codedeploy-agent || true
+          systemctl enable codedeploy-agent
+          systemctl start codedeploy-agent
           mkdir -p /usr/share/nginx/html
           systemctl enable nginx
           systemctl start nginx
