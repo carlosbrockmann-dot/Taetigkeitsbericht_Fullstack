@@ -17,7 +17,7 @@ ASP.NET-Core-API mit **Hot Chocolate** GraphQL zum Empfang und zur Speicherung h
 |-------|--------|
 | Laufzeit | ASP.NET Core |
 | API | Hot Chocolate GraphQL; Minimal-API nur für E-Mail-Confirm |
-| Persistenz | EF Core + Npgsql |
+| Persistenz | EF Core **9.0.7** + Npgsql.EF **9.0.1** (DSQL-Adapter; nicht EF 10) |
 | DB On-Premises | PostgreSQL |
 | DB AWS | Aurora DSQL (`Database:UseDsql` + IAM-Tokens via `Amazon.AuroraDsql.*`) |
 | Auth | JWT Bearer, `PasswordHasher`, E-Mail-Bestätigungstoken |
