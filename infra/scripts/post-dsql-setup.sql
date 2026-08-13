@@ -2,8 +2,11 @@
 -- infra/scripts/ec2-dsql-bootstrap.sh aus (Admin-IAM-Token + psql).
 --
 -- Aurora DSQL: keine festen Passwörter – Verbindung mit IAM-Token.
+-- DDL im Schema public nur als Rolle admin. Die App verbindet als verwaltung.
 --
 -- CREATE ROLE verwaltung WITH LOGIN;
 -- AWS IAM GRANT verwaltung TO 'arn:aws:iam::ACCOUNT_ID:role/ROLE_NAME';
--- GRANT CONNECT ON DATABASE postgres TO verwaltung;
--- GRANT USAGE, CREATE ON SCHEMA public TO verwaltung;
+-- GRANT USAGE ON SCHEMA public TO verwaltung;
+--
+-- Tabellen: Backend startet EF-Migrationen als admin, danach
+-- GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO verwaltung;

@@ -13,6 +13,7 @@ public class DatabaseOptions
     /// <summary>DSQL-Cluster-Endpoint (Hostname).</summary>
     public string? Host { get; set; }
 
+    /// <summary>App-Rolle (IAM GRANT). DDL/Migrationen laufen in DSQL als <c>admin</c>.</summary>
     public string User { get; set; } = "verwaltung";
 
     public string Database { get; set; } = "postgres";

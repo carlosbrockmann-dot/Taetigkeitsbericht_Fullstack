@@ -11,20 +11,39 @@ internal static class DatabaseStatusPage
         string? error,
         bool useDsql,
         string? host,
-        string database)
+        string database,
+        string? migrationError = null,
+        bool migrationsApplied = false)
     {
-        var title = reachable ? "Datenbank erreichbar" : "Datenbank nicht erreichbar";
-        var tone = reachable ? "#0f7b3d" : "#b42318";
-        var bg = reachable ? "#ecfdf3" : "#fef3f2";
-        var detail = reachable
-            ? "Das Backend kann die Datenbank erreichen. GraphQL steht unter <code>/graphql</code> bereit."
-            : "Das Backend läuft, die Datenbank antwortet aber nicht. Bitte Verbindung, Cluster, IAM und Netzwerk (PrivateLink) prüfen.";
-        var errorBlock = string.IsNullOrWhiteSpace(error)
+        var schemaOk = reachable && string.IsNullOrWhiteSpace(migrationError);
+        var title = !reachable
+            ? "Datenbank nicht erreichbar"
+            : schemaOk
+                ? "Datenbank erreichbar"
+                : "Schema fehlt (Migration)";
+        var tone = schemaOk ? "#0f7b3d" : "#b42318";
+        var bg = schemaOk ? "#ecfdf3" : "#fef3f2";
+        var detail = !reachable
+            ? "Das Backend läuft, die Datenbank antwortet aber nicht. Bitte Verbindung, Cluster, IAM und Netzwerk (PrivateLink) prüfen."
+            : schemaOk
+                ? "Das Backend kann die Datenbank erreichen. GraphQL steht unter <code>/graphql</code> bereit."
+                : "Verbindung zur Datenbank steht, aber die Tabellen wurden nicht angelegt. Migration läuft in DSQL als <code>admin</code>; die App-Rolle braucht danach DML-Rechte.";
+        var combinedError = string.Join(
+            "\n\n",
+            new[] { error, migrationError }.Where(s => !string.IsNullOrWhiteSpace(s)));
+        var errorBlock = string.IsNullOrWhiteSpace(combinedError)
             ? ""
-            : $"<pre>{WebUtility.HtmlEncode(error)}</pre>";
+            : $"<pre>{WebUtility.HtmlEncode(combinedError)}</pre>";
+        var migrateNote = migrationsApplied
+            ? "Migrationen angewendet."
+            : (string.IsNullOrWhiteSpace(migrationError) ? "" : "Migration fehlgeschlagen.");
         var target = useDsql
             ? $"Aurora DSQL · Host {WebUtility.HtmlEncode(host ?? "(nicht gesetzt)")} · Datenbank {WebUtility.HtmlEncode(database)}"
             : $"PostgreSQL · {WebUtility.HtmlEncode(host ?? "ConnectionStrings:DefaultConnection")} · Datenbank {WebUtility.HtmlEncode(database)}";
+        if (!string.IsNullOrWhiteSpace(migrateNote))
+        {
+            target += " · " + migrateNote;
+        }
 
         return $$"""
             <!DOCTYPE html>
@@ -60,10 +79,10 @@ internal static class DatabaseStatusPage
             """;
     }
 
-    public static IResult ToResult(bool reachable, string html) =>
+    public static IResult ToResult(bool ready, string html) =>
         Results.Content(
             html,
             "text/html; charset=utf-8",
             Encoding.UTF8,
-            reachable ? StatusCodes.Status200OK : StatusCodes.Status503ServiceUnavailable);
+            ready ? StatusCodes.Status200OK : StatusCodes.Status503ServiceUnavailable);
 }

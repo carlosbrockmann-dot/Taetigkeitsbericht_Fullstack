@@ -42,7 +42,8 @@ if (databaseOptions.UseDsql)
             cfg.Port = databaseOptions.Port;
             cfg.OrmPrefix = "efcore";
         });
-    builder.Services.AddDbContext<AppDbContext>((sp, options) => options.UseDsql(sp));
+    builder.Services.AddDbContext<AppDbContext>((sp, options) =>
+        options.UseDsql(sp, dsql => dsql.EnableIdentityColumns(65536)));
 }
 else
 {
@@ -115,6 +116,7 @@ builder.Services
     });
 
 builder.Services.AddAuthorization();
+builder.Services.AddSingleton<DatabaseStartupState>();
 
 var corsOrigins = builder.Configuration.GetSection("Cors:Origins").Get<string[]>()
     ?? ["http://localhost:5173", "http://127.0.0.1:5173"];
@@ -165,16 +167,31 @@ var app = builder.Build();
 
 if (databaseOptions.MigrateOnStartup)
 {
+    var startupState = app.Services.GetRequiredService<DatabaseStartupState>();
     try
     {
-        using var scope = app.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         app.Logger.LogInformation("Führe EF-Core-Migrationen aus…");
-        await db.Database.MigrateAsync();
+        if (databaseOptions.UseDsql)
+        {
+            await DsqlSchema.ApplyMigrationsAndGrantsAsync(
+                databaseOptions,
+                app.Services.GetRequiredService<ILoggerFactory>(),
+                app.Logger);
+        }
+        else
+        {
+            using var scope = app.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            await db.Database.MigrateAsync();
+        }
+
+        startupState.MigrationsApplied = true;
         app.Logger.LogInformation("Migrationen abgeschlossen.");
     }
     catch (Exception ex)
     {
+        startupState.MigrationsApplied = false;
+        startupState.MigrationError = ex.GetBaseException().Message;
         app.Logger.LogError(ex, "Datenbank nicht erreichbar oder Migration fehlgeschlagen. Dienst bleibt aktiv (Statusseite unter /).");
     }
 }
@@ -221,7 +238,7 @@ app.MapGraphQL("/graphql").WithOptions(o =>
     o.EnableSchemaRequests = true; // Schema per /graphql?sdl
 });
 
-app.MapGet("/", async (IServiceProvider services, CancellationToken cancellationToken) =>
+app.MapGet("/", async (IServiceProvider services, DatabaseStartupState startup, CancellationToken cancellationToken) =>
 {
     var hostLabel = databaseOptions.UseDsql
         ? databaseOptions.Host
@@ -233,9 +250,17 @@ app.MapGet("/", async (IServiceProvider services, CancellationToken cancellation
         using var scope = services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var (ok, error) = await CheckDatabaseAsync(db, cancellationToken);
+        var ready = ok && string.IsNullOrWhiteSpace(startup.MigrationError);
         return DatabaseStatusPage.ToResult(
-            ok,
-            DatabaseStatusPage.Render(ok, error, databaseOptions.UseDsql, hostLabel, dbName));
+            ready,
+            DatabaseStatusPage.Render(
+                ok,
+                error,
+                databaseOptions.UseDsql,
+                hostLabel,
+                dbName,
+                startup.MigrationError,
+                startup.MigrationsApplied));
     }
     catch (Exception ex)
     {
@@ -244,7 +269,9 @@ app.MapGet("/", async (IServiceProvider services, CancellationToken cancellation
             ex.GetBaseException().Message,
             databaseOptions.UseDsql,
             hostLabel,
-            dbName);
+            dbName,
+            startup.MigrationError,
+            startup.MigrationsApplied);
         return DatabaseStatusPage.ToResult(false, html);
     }
 });

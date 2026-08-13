@@ -335,7 +335,7 @@ Fehler beim SMTP-Versand erscheinen in der GraphQL-Antwort / im Log (`E-Mail kon
 | **AWS** | Aurora DSQL |
 
 - Lokal: `ConnectionStrings:DefaultConnection`. AWS: `Database__UseDsql=true` + `Database__Host` (IAM-Tokens, kein festes DB-Passwort)
-- Pipeline: `ec2-dsql-bootstrap.sh` (Rolle/`AWS IAM GRANT`) → Backend mit `Database__MigrateOnStartup=true`
+- Pipeline: `ec2-dsql-bootstrap.sh` (Rolle/`AWS IAM GRANT`) → Backend migriert als `admin`, App als `verwaltung`
 - **AWS:** DB-Zugriff über **VPC + PrivateLink**; siehe [infra/README.md](../infra/README.md)
 - **CI/CD:** [`.github/workflows/deploy-aws.yml`](../.github/workflows/deploy-aws.yml)
 - API von außen per HTTPS (z. B. Port 80/443 bzw. 5108) für Frontend und Desktop

@@ -317,7 +317,7 @@ Beim Backend-CodeDeploy (**AfterInstall**, nicht per SSM-Skriptliste):
 
 1. **`ec2-dsql-bootstrap.sh`**: Admin-IAM-Token → `CREATE ROLE verwaltung` → `AWS IAM GRANT` → Schema-Rechte (idempotent, **kein** DROP)  
 2. **Backend-Start** mit `Database__UseDsql=true`  
-3. **`Database__MigrateOnStartup=true`**: nur ausstehende EF-Migrationen  
+3. **`Database__MigrateOnStartup=true`**: EF-Migrationen als Rolle **admin** (nur admin darf in DSQL Tabellen in `public` anlegen), danach `GRANT` DML an `verwaltung` 
 
 **Besteht der DSQL-Cluster bereits** (im Stack oder mit Name-Tag `taetigkeitsbericht-fullstack-dsql`), bleibt er erhalten. Die Pipeline ruft **kein** `delete-cluster` auf und ersetzt keinen lebenden Cluster.
 

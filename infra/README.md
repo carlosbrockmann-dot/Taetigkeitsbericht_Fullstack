@@ -50,7 +50,7 @@ Offizielle Hinweise zu PrivateLink: [Managing Aurora DSQL with PrivateLink](http
 
 1. CloudFormation (jeder Lauf): fehlende Ressourcen neu; vorhandener Cluster bleibt (`Retain`, ggf. Import)  
 2. CodeDeploy Backend: `ec2-dsql-bootstrap.sh` (Rolle + `AWS IAM GRANT`; **kein** DROP)  
-3. Backend-Start: IAM-Token als `verwaltung`, nur ausstehende EF-Migrationen  
+3. Backend-Start: Migrationen als **admin**, danach DML-GRANT an `verwaltung`; App verbindet als `verwaltung`  
 4. DSQL: `DeletionProtectionEnabled` + `Retain` – Pipeline löscht keinen existierenden Cluster
 
 Lokal bleibt `Database:UseDsql=false` und `ConnectionStrings:DefaultConnection` (PostgreSQL).

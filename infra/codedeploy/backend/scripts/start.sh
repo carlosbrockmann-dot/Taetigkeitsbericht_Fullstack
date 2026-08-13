@@ -38,7 +38,7 @@ systemctl enable taetigkeitsbericht-backend
 systemctl restart taetigkeitsbericht-backend
 
 ok=0
-for i in $(seq 1 24); do
+for i in $(seq 1 60); do
   if systemctl is-active --quiet taetigkeitsbericht-backend; then
     ok=1
     break
