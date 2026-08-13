@@ -274,7 +274,9 @@ Resources:
           #!/bin/bash
           set -eux
           dnf update -y || yum update -y
-          dnf install -y docker nginx git || yum install -y docker nginx git
+          dnf install -y docker nginx git amazon-ssm-agent || yum install -y docker nginx git amazon-ssm-agent
+          systemctl enable amazon-ssm-agent || true
+          systemctl restart amazon-ssm-agent || true
           systemctl enable docker
           systemctl start docker
           usermod -aG docker ec2-user || true
@@ -304,7 +306,9 @@ Resources:
           #!/bin/bash
           set -eux
           dnf update -y || yum update -y
-          dnf install -y nginx git || yum install -y nginx git
+          dnf install -y nginx git amazon-ssm-agent || yum install -y nginx git amazon-ssm-agent
+          systemctl enable amazon-ssm-agent || true
+          systemctl restart amazon-ssm-agent || true
           systemctl enable nginx
           systemctl start nginx
           mkdir -p /usr/share/nginx/html

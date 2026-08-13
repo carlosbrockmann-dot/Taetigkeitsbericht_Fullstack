@@ -225,17 +225,52 @@ jobs:
           set -euo pipefail
           for ID in "${{ needs.deploy-infra.outputs.backend_instance_id }}" \
                     "${{ needs.deploy-infra.outputs.frontend_instance_id }}"; do
-            echo "Waiting for SSM: $ID"
-            for i in $(seq 1 36); do
+            ID="$(echo -n "$ID" | tr -d '[:space:]')"
+            echo "Waiting for SSM: '$ID'"
+            if [[ ! "$ID" =~ ^i-[0-9a-fA-F]+$ ]]; then
+              echo "::error::Ungültige oder leere Instance-ID: '$ID' (CloudFormation-Output prüfen)"
+              exit 1
+            fi
+            EC2_STATE=$(aws ec2 describe-instances --instance-ids "$ID" \
+              --query "Reservations[0].Instances[0].State.Name" --output text 2>/dev/null || echo "missing")
+            echo "EC2 state=$EC2_STATE"
+            if [ "$EC2_STATE" != "running" ]; then
+              echo "::error::Instanz $ID ist nicht running (state=$EC2_STATE)"
+              aws ec2 describe-instances --instance-ids "$ID" --output table || true
+              exit 1
+            fi
+            PROFILE=$(aws ec2 describe-instances --instance-ids "$ID" \
+              --query "Reservations[0].Instances[0].IamInstanceProfile.Arn" --output text 2>/dev/null || echo "none")
+            echo "IAM instance profile=$PROFILE"
+            if [ "$PROFILE" = "None" ] || [ "$PROFILE" = "none" ] || [ -z "$PROFILE" ]; then
+              echo "::error::Kein IAM Instance Profile an $ID – SSM kann nicht registrieren"
+              exit 1
+            fi
+
+            ONLINE=0
+            for i in $(seq 1 60); do
               STATUS=$(aws ssm describe-instance-information \
                 --filters "Key=InstanceIds,Values=$ID" \
-                --query "InstanceInformationList[0].PingStatus" --output text || true)
+                --query "InstanceInformationList[0].PingStatus" --output text 2>/dev/null || true)
+              echo "Versuch $i/60: SSM PingStatus=${STATUS:-empty}"
               if [ "$STATUS" = "Online" ]; then
                 echo "Online: $ID"
+                ONLINE=1
                 break
               fi
               sleep 10
             done
+            if [ "$ONLINE" != "1" ]; then
+              echo "::error::SSM nicht Online für $ID nach ~10 Min (Agent/IAM/Netz)."
+              echo "=== describe-instance-information ==="
+              aws ssm describe-instance-information --output table || true
+              echo "=== Instance IAM/Netz ==="
+              aws ec2 describe-instances --instance-ids "$ID" \
+                --query "Reservations[0].Instances[0].[InstanceId,State.Name,PublicIpAddress,PrivateIpAddress,IamInstanceProfile]" \
+                --output text || true
+              echo "Tipp: Workflow mit force_instance_refresh=true neu starten, damit UserData SSM-Agent startet."
+              exit 1
+            fi
           done
 
       - name: Deploy Backend + DSQL bootstrap + migrate via SSM
@@ -245,6 +280,11 @@ jobs:
           JWT_KEY: ${{ secrets.JWT_KEY }}
         run: |
           set -euo pipefail
+          INSTANCE_ID="$(echo -n "${INSTANCE_ID}" | tr -d '[:space:]')"
+          if [[ ! "$INSTANCE_ID" =~ ^i-[0-9a-fA-F]+$ ]]; then
+            echo "::error::Backend INSTANCE_ID ungültig: '$INSTANCE_ID'"
+            exit 1
+          fi
           if [ -z "${DSQL_ENDPOINT:-}" ]; then
             echo "::error::DSQL_ENDPOINT ist leer"
             exit 1
@@ -314,6 +354,7 @@ jobs:
           print("SSM command payload written,", len(cmds), "commands")
           PY
 
+          echo "SendCommand an Instance $INSTANCE_ID …"
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "$INSTANCE_ID" \
             --document-name "AWS-RunShellScript" \
@@ -337,6 +378,11 @@ jobs:
           BUCKET: ${{ steps.s3.outputs.bucket }}
         run: |
           set -euo pipefail
+          INSTANCE_ID="$(echo -n "${INSTANCE_ID}" | tr -d '[:space:]')"
+          if [[ ! "$INSTANCE_ID" =~ ^i-[0-9a-fA-F]+$ ]]; then
+            echo "::error::Frontend INSTANCE_ID ungültig: '$INSTANCE_ID'"
+            exit 1
+          fi
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "$INSTANCE_ID" \
             --document-name "AWS-RunShellScript" \
