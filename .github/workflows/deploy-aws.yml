@@ -6,30 +6,56 @@ on:
   workflow_dispatch:
     inputs:
       force_instance_refresh:
-        description: "EC2-Instanzen per CloudFormation ersetzen"
+        description: "EC2-Instanzen per CloudFormation ersetzen (UserData/CodeDeploy-Agent)"
         type: boolean
         default: false
+      deploy_infra:
+        description: "CloudFormation-Stack aktualisieren"
+        type: boolean
+        default: true
+      deploy_apps:
+        description: "Backend + Frontend per CodeDeploy ausrollen"
+        type: boolean
+        default: true
 
 permissions:
   contents: read
 
 env:
-  # Secret bevorzugen; Variable als Fallback (falls unter Variables statt Secrets angelegt)
   AWS_REGION: ${{ secrets.AWS_REGION || vars.AWS_REGION }}
   STACK_NAME: taetigkeitsbericht
   PROJECT_NAME: taetigkeitsbericht
 
 jobs:
-  deploy-infra:
-    name: CloudFormation VPC + EC2 + DSQL
+  detect:
+    name: Änderungen erkennen
     runs-on: ubuntu-latest
     outputs:
-      backend_instance_id: ${{ steps.outs.outputs.backend_instance_id }}
-      frontend_instance_id: ${{ steps.outs.outputs.frontend_instance_id }}
-      backend_public_ip: ${{ steps.outs.outputs.backend_public_ip }}
-      frontend_public_ip: ${{ steps.outs.outputs.frontend_public_ip }}
-      # dsql_endpoint bewusst kein Job-Output: GitHub filtert Hostnamen oft als Secret heraus
-      ec2_role_arn: ${{ steps.outs.outputs.ec2_role_arn }}
+      infra: ${{ steps.filter.outputs.infra }}
+      apps: ${{ steps.filter.outputs.apps }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            infra:
+              - "infra/cloudformation/**"
+              - "infra/scripts/**"
+              - ".github/workflows/deploy-aws.yml"
+            apps:
+              - "Backend/**"
+              - "Frontend/**"
+              - "infra/codedeploy/**"
+              - ".github/workflows/deploy-aws.yml"
+
+  deploy-infra:
+    name: CloudFormation
+    needs: detect
+    if: >
+      (github.event_name == 'workflow_dispatch' && inputs.deploy_infra) ||
+      (github.event_name == 'push' && needs.detect.outputs.infra == 'true')
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -38,12 +64,11 @@ jobs:
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          JWT_KEY: ${{ secrets.JWT_KEY }}
         run: |
           set -euo pipefail
           missing=0
           if [ -z "${AWS_REGION:-}" ]; then
-            echo "::error::AWS_REGION fehlt. Unter Settings → Secrets and variables → Actions ein Secret (oder Variable) 'AWS_REGION' anlegen, z. B. eu-central-1"
+            echo "::error::AWS_REGION fehlt (Repository Secret oder Variable)."
             missing=1
           fi
           if [ -z "${AWS_ACCESS_KEY_ID:-}" ]; then
@@ -54,16 +79,11 @@ jobs:
             echo "::error::Secret AWS_SECRET_ACCESS_KEY fehlt."
             missing=1
           fi
-          if [ -z "${JWT_KEY:-}" ]; then
-            echo "::error::Secret JWT_KEY fehlt (wird später fürs Backend-Deploy gebraucht)."
-            missing=1
-          fi
           if [ "$missing" -ne 0 ]; then
             exit 1
           fi
-          echo "AWS_REGION=$AWS_REGION"
 
-      - name: Configure AWS credentials (Access Keys)
+      - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -71,7 +91,6 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Deploy / update CloudFormation stack
-        id: cfn
         env:
           FORCE_REFRESH: ${{ github.event_name == 'workflow_dispatch' && inputs.force_instance_refresh || 'false' }}
         run: |
@@ -86,7 +105,7 @@ jobs:
 
           echo "Region=${AWS_REGION} Stack=${STACK_NAME}"
           aws cloudformation describe-stacks --stack-name "${STACK_NAME}" \
-            --query "Stacks[0].[StackName,StackStatus,StackStatusReason]" --output text 2>/dev/null \
+            --query "Stacks[0].[StackName,StackStatus]" --output text 2>/dev/null \
             || echo "Stack existiert noch nicht (Create)."
 
           if ! aws cloudformation deploy \
@@ -100,66 +119,83 @@ jobs:
               echo "=== Stack-Status ==="
               aws cloudformation describe-stacks --stack-name "${STACK_NAME}" \
                 --query "Stacks[0].[StackStatus,StackStatusReason]" --output text 2>/dev/null || echo "(kein Stack)"
-              echo "=== FAILED-Events (text) ==="
+              echo "=== Events (text) ==="
               aws cloudformation describe-stack-events --stack-name "${STACK_NAME}" \
-                --output text 2>/dev/null \
-                | awk '/FAILED/ {print; c=2} c&&c--' \
-                | head -n 60 \
-                || echo "(keine FAILED-Events / kein Stack)"
-              echo "=== Letzte Events (text, max 20 Zeilen) ==="
-              aws cloudformation describe-stack-events --stack-name "${STACK_NAME}" \
-                --output text 2>/dev/null | head -n 20 || true
+                --output text 2>/dev/null | head -n 40 || true
             } | tee "$GITHUB_STEP_SUMMARY" >&2
             exit 1
           fi
 
-      - name: Export stack outputs
-        id: outs
-        run: |
-          set -euo pipefail
-          get() { aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
-            --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" --output text; }
-          echo "backend_instance_id=$(get BackendInstanceId)" >> "$GITHUB_OUTPUT"
-          echo "frontend_instance_id=$(get FrontendInstanceId)" >> "$GITHUB_OUTPUT"
-          echo "backend_public_ip=$(get BackendPublicIp)" >> "$GITHUB_OUTPUT"
-          echo "frontend_public_ip=$(get FrontendPublicIp)" >> "$GITHUB_OUTPUT"
-          echo "ec2_role_arn=$(get Ec2RoleArn)" >> "$GITHUB_OUTPUT"
-          # DsqlEndpoint nur loggen (Job-Outputs würden von GitHub oft verworfen)
-          echo "DsqlEndpoint=$(get DsqlEndpoint)"
-
-  build-and-deploy-apps:
-    name: Build & deploy Backend + Frontend auf EC2
-    needs: deploy-infra
+  deploy-apps:
+    name: Build & CodeDeploy
+    needs: [detect, deploy-infra]
+    if: >
+      always() &&
+      (needs.deploy-infra.result == 'success' || needs.deploy-infra.result == 'skipped') &&
+      (
+        (github.event_name == 'workflow_dispatch' && inputs.deploy_apps) ||
+        (github.event_name == 'push' && (needs.detect.outputs.apps == 'true' || needs.detect.outputs.infra == 'true'))
+      )
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Configure AWS credentials (Access Keys)
+      - name: Check required secrets
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          JWT_KEY: ${{ secrets.JWT_KEY }}
+        run: |
+          set -euo pipefail
+          missing=0
+          if [ -z "${AWS_REGION:-}" ]; then echo "::error::AWS_REGION fehlt."; missing=1; fi
+          if [ -z "${AWS_ACCESS_KEY_ID:-}" ]; then echo "::error::AWS_ACCESS_KEY_ID fehlt."; missing=1; fi
+          if [ -z "${AWS_SECRET_ACCESS_KEY:-}" ]; then echo "::error::AWS_SECRET_ACCESS_KEY fehlt."; missing=1; fi
+          if [ -z "${JWT_KEY:-}" ]; then echo "::error::JWT_KEY fehlt."; missing=1; fi
+          if [ "$missing" -ne 0 ]; then exit 1; fi
+
+      - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Resolve DSQL endpoint from stack
+      - name: Read stack outputs
         id: stack
         run: |
           set -euo pipefail
           get() { aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
             --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" --output text; }
-          DSQL_ENDPOINT="$(get DsqlEndpoint)"
-          EC2_ROLE_ARN="$(get Ec2RoleArn)"
-          if [ -z "$DSQL_ENDPOINT" ] || [ "$DSQL_ENDPOINT" = "None" ]; then
-            echo "::error::DsqlEndpoint fehlt im Stack $STACK_NAME"
+          BUCKET="$(get ArtifactBucketName)"
+          BACKEND_IP="$(get BackendPublicIp)"
+          FRONTEND_IP="$(get FrontendPublicIp)"
+          CD_BE="$(get CodeDeployBackendApp)"
+          CD_FE="$(get CodeDeployFrontendApp)"
+          if [ -z "$BUCKET" ] || [ "$BUCKET" = "None" ]; then
+            echo "::error::ArtifactBucketName fehlt – zuerst Infra-Job (CloudFormation) laufen lassen."
             exit 1
           fi
-          # In denselben Job via ENV (nicht Job-Output), damit GitHub den Wert nicht verwirft
           {
-            echo "DSQL_ENDPOINT=$DSQL_ENDPOINT"
-            echo "EC2_ROLE_ARN=$EC2_ROLE_ARN"
-          } >> "$GITHUB_ENV"
-          echo "DsqlEndpoint aufgelöst (${#DSQL_ENDPOINT} Zeichen)"
+            echo "bucket=$BUCKET"
+            echo "backend_ip=$BACKEND_IP"
+            echo "frontend_ip=$FRONTEND_IP"
+            echo "cd_backend=$CD_BE"
+            echo "cd_frontend=$CD_FE"
+          } >> "$GITHUB_OUTPUT"
+          echo "Bucket=$BUCKET BackendEIP=$BACKEND_IP FrontendEIP=$FRONTEND_IP"
+
+      - name: JWT nach SSM Parameter Store
+        env:
+          JWT_KEY: ${{ secrets.JWT_KEY }}
+        run: |
+          set -euo pipefail
+          aws ssm put-parameter \
+            --name "/${PROJECT_NAME}/jwt-key" \
+            --type SecureString \
+            --value "$JWT_KEY" \
+            --overwrite
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
@@ -173,17 +209,20 @@ jobs:
           cache: npm
           cache-dependency-path: Frontend/package-lock.json
 
-      - name: Publish Backend
+      - name: Publish Backend (self-contained linux-x64)
         run: |
           dotnet publish Backend/src/Taetigkeitsbericht.Backend.csproj \
             -c Release \
+            -r linux-x64 \
+            --self-contained true \
+            -p:PublishSingleFile=false \
             -o artifacts/backend
 
       - name: Build Frontend
         working-directory: Frontend
         env:
           BACKEND_PUBLIC: ${{ secrets.BACKEND_HOST_PUBLIC }}
-          BACKEND_IP: ${{ needs.deploy-infra.outputs.backend_public_ip }}
+          BACKEND_IP: ${{ steps.stack.outputs.backend_ip }}
         run: |
           if [ -n "${BACKEND_PUBLIC}" ]; then
             export VITE_GRAPHQL_URL="${BACKEND_PUBLIC%/}/graphql"
@@ -194,227 +233,101 @@ jobs:
           npm ci
           npm run build
 
-      - name: Pack artifacts
-        run: |
-          mkdir -p dist
-          tar -czf dist/backend.tar.gz -C artifacts/backend .
-          tar -czf dist/frontend.tar.gz -C Frontend/dist .
-          cp infra/scripts/ec2-dsql-bootstrap.sh dist/ec2-dsql-bootstrap.sh
-
-      - name: Upload artifacts to S3 staging
-        id: s3
+      - name: Pack CodeDeploy bundles
         run: |
           set -euo pipefail
-          BUCKET="${PROJECT_NAME}-deploy-${{ github.run_id }}-${{ github.run_attempt }}"
-          # Temporärer Bucket pro Run (oder festen Deploy-Bucket in Secrets nutzen)
-          if ! aws s3api head-bucket --bucket "$BUCKET" 2>/dev/null; then
-            if [ "${AWS_REGION}" = "us-east-1" ]; then
-              aws s3api create-bucket --bucket "$BUCKET"
-            else
-              aws s3api create-bucket --bucket "$BUCKET" \
-                --create-bucket-configuration LocationConstraint="${AWS_REGION}"
-            fi
-          fi
-          aws s3 cp dist/backend.tar.gz "s3://${BUCKET}/backend.tar.gz"
-          aws s3 cp dist/frontend.tar.gz "s3://${BUCKET}/frontend.tar.gz"
-          aws s3 cp dist/ec2-dsql-bootstrap.sh "s3://${BUCKET}/ec2-dsql-bootstrap.sh"
-          echo "bucket=${BUCKET}" >> "$GITHUB_OUTPUT"
+          mkdir -p dist/backend/app dist/backend/scripts dist/frontend/dist dist/frontend/scripts
+          cp -a artifacts/backend/. dist/backend/app/
+          cp infra/codedeploy/backend/appspec.yml dist/backend/appspec.yml
+          cp infra/codedeploy/backend/scripts/*.sh dist/backend/scripts/
+          cp infra/scripts/ec2-dsql-bootstrap.sh dist/backend/scripts/ec2-dsql-bootstrap.sh
+          chmod +x dist/backend/scripts/*.sh
+          (cd dist/backend && zip -qr ../../artifacts/backend-codedeploy.zip .)
 
-      - name: Wait for SSM on instances
+          cp -a Frontend/dist/. dist/frontend/dist/
+          cp infra/codedeploy/frontend/appspec.yml dist/frontend/appspec.yml
+          cp infra/codedeploy/frontend/scripts/*.sh dist/frontend/scripts/
+          chmod +x dist/frontend/scripts/*.sh
+          (cd dist/frontend && zip -qr ../../artifacts/frontend-codedeploy.zip .)
+
+      - name: Upload bundles to artifact bucket
+        env:
+          BUCKET: ${{ steps.stack.outputs.bucket }}
         run: |
           set -euo pipefail
-          for ID in "${{ needs.deploy-infra.outputs.backend_instance_id }}" \
-                    "${{ needs.deploy-infra.outputs.frontend_instance_id }}"; do
-            ID="$(echo -n "$ID" | tr -d '[:space:]')"
-            echo "Waiting for SSM: '$ID'"
-            if [[ ! "$ID" =~ ^i-[0-9a-fA-F]+$ ]]; then
-              echo "::error::Ungültige oder leere Instance-ID: '$ID' (CloudFormation-Output prüfen)"
-              exit 1
-            fi
-            EC2_STATE=$(aws ec2 describe-instances --instance-ids "$ID" \
-              --query "Reservations[0].Instances[0].State.Name" --output text 2>/dev/null || echo "missing")
-            echo "EC2 state=$EC2_STATE"
-            if [ "$EC2_STATE" != "running" ]; then
-              echo "::error::Instanz $ID ist nicht running (state=$EC2_STATE)"
-              aws ec2 describe-instances --instance-ids "$ID" --output table || true
-              exit 1
-            fi
-            PROFILE=$(aws ec2 describe-instances --instance-ids "$ID" \
-              --query "Reservations[0].Instances[0].IamInstanceProfile.Arn" --output text 2>/dev/null || echo "none")
-            echo "IAM instance profile=$PROFILE"
-            if [ "$PROFILE" = "None" ] || [ "$PROFILE" = "none" ] || [ -z "$PROFILE" ]; then
-              echo "::error::Kein IAM Instance Profile an $ID – SSM kann nicht registrieren"
-              exit 1
-            fi
+          aws s3 cp artifacts/backend-codedeploy.zip "s3://${BUCKET}/backend.zip"
+          aws s3 cp artifacts/frontend-codedeploy.zip "s3://${BUCKET}/frontend.zip"
 
-            ONLINE=0
-            for i in $(seq 1 60); do
-              STATUS=$(aws ssm describe-instance-information \
-                --filters "Key=InstanceIds,Values=$ID" \
-                --query "InstanceInformationList[0].PingStatus" --output text 2>/dev/null || true)
-              echo "Versuch $i/60: SSM PingStatus=${STATUS:-empty}"
-              if [ "$STATUS" = "Online" ]; then
-                echo "Online: $ID"
-                ONLINE=1
-                break
-              fi
-              sleep 10
-            done
-            if [ "$ONLINE" != "1" ]; then
-              echo "::error::SSM nicht Online für $ID nach ~10 Min (Agent/IAM/Netz)."
-              echo "=== describe-instance-information ==="
-              aws ssm describe-instance-information --output table || true
-              echo "=== Instance IAM/Netz ==="
-              aws ec2 describe-instances --instance-ids "$ID" \
-                --query "Reservations[0].Instances[0].[InstanceId,State.Name,PublicIpAddress,PrivateIpAddress,IamInstanceProfile]" \
-                --output text || true
-              echo "Tipp: Workflow mit force_instance_refresh=true neu starten, damit UserData SSM-Agent startet."
-              exit 1
+      - name: Deploy Backend via CodeDeploy
+        env:
+          BUCKET: ${{ steps.stack.outputs.bucket }}
+          APP: ${{ steps.stack.outputs.cd_backend }}
+        run: |
+          set -euo pipefail
+          last=""
+          DEP_ID=""
+          for i in $(seq 1 30); do
+            set +e
+            last=$(aws deploy create-deployment \
+              --application-name "$APP" \
+              --deployment-group-name backend \
+              --s3-location "bucket=${BUCKET},key=backend.zip,bundleType=zip" \
+              --description "Backend ${GITHUB_SHA}" \
+              --query deploymentId --output text 2>&1)
+            rc=$?
+            set -e
+            if [ "$rc" -eq 0 ] && [[ "$last" == d-* ]]; then
+              DEP_ID="$last"
+              break
             fi
+            echo "Versuch $i/30: $last"
+            sleep 20
           done
+          if [ -z "$DEP_ID" ]; then
+            echo "::error::Backend CodeDeploy fehlgeschlagen: $last"
+            exit 1
+          fi
+          echo "DeploymentId=$DEP_ID"
+          aws deploy wait deployment-successful --deployment-id "$DEP_ID"
 
-      - name: Deploy Backend + DSQL bootstrap + migrate via SSM
+      - name: Deploy Frontend via CodeDeploy
         env:
-          INSTANCE_ID: ${{ needs.deploy-infra.outputs.backend_instance_id }}
-          BUCKET: ${{ steps.s3.outputs.bucket }}
-          JWT_KEY: ${{ secrets.JWT_KEY }}
+          BUCKET: ${{ steps.stack.outputs.bucket }}
+          APP: ${{ steps.stack.outputs.cd_frontend }}
         run: |
           set -euo pipefail
-          INSTANCE_ID="$(echo -n "${INSTANCE_ID}" | tr -d '[:space:]')"
-          if [[ ! "$INSTANCE_ID" =~ ^i-[0-9a-fA-F]+$ ]]; then
-            echo "::error::Backend INSTANCE_ID ungültig: '$INSTANCE_ID'"
+          last=""
+          DEP_ID=""
+          for i in $(seq 1 30); do
+            set +e
+            last=$(aws deploy create-deployment \
+              --application-name "$APP" \
+              --deployment-group-name frontend \
+              --s3-location "bucket=${BUCKET},key=frontend.zip,bundleType=zip" \
+              --description "Frontend ${GITHUB_SHA}" \
+              --query deploymentId --output text 2>&1)
+            rc=$?
+            set -e
+            if [ "$rc" -eq 0 ] && [[ "$last" == d-* ]]; then
+              DEP_ID="$last"
+              break
+            fi
+            echo "Versuch $i/30: $last"
+            sleep 20
+          done
+          if [ -z "$DEP_ID" ]; then
+            echo "::error::Frontend CodeDeploy fehlgeschlagen: $last"
             exit 1
           fi
-          if [ -z "${DSQL_ENDPOINT:-}" ]; then
-            echo "::error::DSQL_ENDPOINT ist leer"
-            exit 1
-          fi
-          if [ -z "${EC2_ROLE_ARN:-}" ]; then
-            echo "::error::EC2_ROLE_ARN ist leer"
-            exit 1
-          fi
-
-          # SSM-Befehle als JSON-Datei (weniger Quoting-Probleme)
-          python3 <<'PY'
-          import json, os
-          bucket = os.environ["BUCKET"]
-          jwt = os.environ["JWT_KEY"]
-          dsql = os.environ["DSQL_ENDPOINT"]
-          role = os.environ["EC2_ROLE_ARN"]
-          region = os.environ["AWS_REGION"]
-          # systemd Environment-Werte: Anführungszeichen escapen
-          def env_line(key: str, value: str) -> str:
-              safe = value.replace("\\", "\\\\").replace('"', '\\"')
-              return f'Environment="{key}={safe}"\n'
-
-          unit = (
-              "[Unit]\nDescription=Taetigkeitsbericht Backend\nAfter=network.target\n"
-              "[Service]\nWorkingDirectory=/opt/taetigkeitsbericht/backend\n"
-              "ExecStart=/usr/local/bin/dotnet /opt/taetigkeitsbericht/backend/Taetigkeitsbericht.Backend.dll --urls=http://0.0.0.0:5108\n"
-              "Restart=always\n"
-              + env_line("ASPNETCORE_ENVIRONMENT", "Production")
-              + env_line("Jwt__Key", jwt)
-              + env_line("Database__UseDsql", "true")
-              + env_line("Database__Host", dsql)
-              + env_line("Database__User", "verwaltung")
-              + env_line("Database__Database", "postgres")
-              + env_line("Database__MigrateOnStartup", "true")
-              + env_line("AWS_REGION", region)
-              + env_line("AWS_DEFAULT_REGION", region)
-              + "[Install]\nWantedBy=multi-user.target\n"
-          )
-          cmds = [
-              "set -eux",
-              "dnf install -y tar gzip awscli postgresql15 || yum install -y tar gzip awscli postgresql15 || true",
-              "mkdir -p /opt/taetigkeitsbericht/backend /opt/taetigkeitsbericht/scripts",
-              f"aws s3 cp s3://{bucket}/backend.tar.gz /tmp/backend.tar.gz",
-              f"aws s3 cp s3://{bucket}/ec2-dsql-bootstrap.sh /opt/taetigkeitsbericht/scripts/ec2-dsql-bootstrap.sh",
-              "chmod +x /opt/taetigkeitsbericht/scripts/ec2-dsql-bootstrap.sh",
-              "tar -xzf /tmp/backend.tar.gz -C /opt/taetigkeitsbericht/backend",
-              f"export DSQL_ENDPOINT={json.dumps(dsql)}",
-              f"export EC2_ROLE_ARN={json.dumps(role)}",
-              f"export AWS_REGION={json.dumps(region)}",
-              "export AWS_DEFAULT_REGION=\"$AWS_REGION\"",
-              "/opt/taetigkeitsbericht/scripts/ec2-dsql-bootstrap.sh",
-              "curl -fsSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin --channel 10.0",
-              "ln -sfn \"$HOME/.dotnet/dotnet\" /usr/local/bin/dotnet || true",
-              "ln -sfn /root/.dotnet/dotnet /usr/local/bin/dotnet || true",
-              "cat > /etc/systemd/system/taetigkeitsbericht-backend.service <<'UNIT'\n"
-              + unit
-              + "UNIT\n",
-              "systemctl daemon-reload",
-              "systemctl enable taetigkeitsbericht-backend",
-              "systemctl restart taetigkeitsbericht-backend",
-              "sleep 15",
-              "systemctl is-active taetigkeitsbericht-backend",
-              "journalctl -u taetigkeitsbericht-backend -n 80 --no-pager || true",
-          ]
-          with open("/tmp/ssm-backend-commands.json", "w", encoding="utf-8") as f:
-              json.dump({"commands": cmds}, f)
-          print("SSM command payload written,", len(cmds), "commands")
-          PY
-
-          echo "SendCommand an Instance $INSTANCE_ID …"
-          COMMAND_ID=$(aws ssm send-command \
-            --instance-ids "$INSTANCE_ID" \
-            --document-name "AWS-RunShellScript" \
-            --comment "Deploy Backend + DSQL bootstrap" \
-            --parameters file:///tmp/ssm-backend-commands.json \
-            --query "Command.CommandId" --output text)
-          echo "SSM CommandId=$COMMAND_ID"
-          aws ssm wait command-executed --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" || true
-          STATUS=$(aws ssm get-command-invocation --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" \
-            --query "Status" --output text)
-          aws ssm get-command-invocation --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" \
-            --query "[Status,StandardOutputContent,StandardErrorContent]" --output text
-          if [ "$STATUS" != "Success" ]; then
-            echo "::error::Backend-SSM-Deploy fehlgeschlagen: $STATUS"
-            exit 1
-          fi
-
-      - name: Deploy Frontend via SSM
-        env:
-          INSTANCE_ID: ${{ needs.deploy-infra.outputs.frontend_instance_id }}
-          BUCKET: ${{ steps.s3.outputs.bucket }}
-        run: |
-          set -euo pipefail
-          INSTANCE_ID="$(echo -n "${INSTANCE_ID}" | tr -d '[:space:]')"
-          if [[ ! "$INSTANCE_ID" =~ ^i-[0-9a-fA-F]+$ ]]; then
-            echo "::error::Frontend INSTANCE_ID ungültig: '$INSTANCE_ID'"
-            exit 1
-          fi
-          COMMAND_ID=$(aws ssm send-command \
-            --instance-ids "$INSTANCE_ID" \
-            --document-name "AWS-RunShellScript" \
-            --comment "Deploy Frontend" \
-            --parameters commands='[
-              "set -eux",
-              "dnf install -y tar gzip awscli nginx || yum install -y tar gzip awscli nginx",
-              "aws s3 cp s3://'"${BUCKET}"'/frontend.tar.gz /tmp/frontend.tar.gz",
-              "rm -rf /usr/share/nginx/html/*",
-              "tar -xzf /tmp/frontend.tar.gz -C /usr/share/nginx/html",
-              "systemctl enable nginx",
-              "systemctl restart nginx"
-            ]' \
-            --query "Command.CommandId" --output text)
-          aws ssm wait command-executed --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" || true
-          aws ssm get-command-invocation --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" \
-            --query "[Status,StandardOutputContent,StandardErrorContent]" --output text
-
-      - name: Cleanup staging bucket
-        if: always()
-        run: |
-          BUCKET="${{ steps.s3.outputs.bucket }}"
-          if [ -n "$BUCKET" ] && [ "$BUCKET" != "None" ]; then
-            aws s3 rb "s3://${BUCKET}" --force || true
-          fi
+          echo "DeploymentId=$DEP_ID"
+          aws deploy wait deployment-successful --deployment-id "$DEP_ID"
 
       - name: Summary
+        if: always()
         run: |
-          echo "### Deploy fertig" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Frontend: http://${{ needs.deploy-infra.outputs.frontend_public_ip }}/" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Backend:  http://${{ needs.deploy-infra.outputs.backend_public_ip }}:5108/graphql" >> "$GITHUB_STEP_SUMMARY"
-          echo "- DSQL endpoint: ${DSQL_ENDPOINT}" >> "$GITHUB_STEP_SUMMARY"
-          echo "- EC2 Role (IAM GRANT verwaltung): ${EC2_ROLE_ARN:-${{ needs.deploy-infra.outputs.ec2_role_arn }}}" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Deploy" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Frontend: http://${{ steps.stack.outputs.frontend_ip }}/" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Backend:  http://${{ steps.stack.outputs.backend_ip }}:5108/graphql" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Artifact-Bucket: ${{ steps.stack.outputs.bucket }}" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "Pipeline: DSQL-Rolle/GRANT via \`ec2-dsql-bootstrap.sh\` (idempotent), nur ausstehende EF-Migrationen (\`MigrateAsync\`) – **keine** DB-Löschung." >> "$GITHUB_STEP_SUMMARY"
+          echo "Ausroll-Kanal: CodeDeploy (keine SSM-Skriptliste). DSQL bleibt erhalten; Bootstrap idempotent in AfterInstall; nur EF-Migrationen beim Backend-Start." >> "$GITHUB_STEP_SUMMARY"

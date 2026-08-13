@@ -172,11 +172,16 @@ if (databaseOptions.MigrateOnStartup)
     app.Logger.LogInformation("Migrationen abgeschlossen.");
 }
 
-app.UseHttpsRedirection();
-
-if (!app.Environment.IsDevelopment())
+var enableHttpsRedirection = app.Configuration.GetValue(
+    "HttpsRedirection:Enabled",
+    app.Environment.IsDevelopment());
+if (enableHttpsRedirection)
 {
-    app.UseHsts();
+    app.UseHttpsRedirection();
+    if (!app.Environment.IsDevelopment())
+    {
+        app.UseHsts();
+    }
 }
 
 app.UseCors("Frontend");

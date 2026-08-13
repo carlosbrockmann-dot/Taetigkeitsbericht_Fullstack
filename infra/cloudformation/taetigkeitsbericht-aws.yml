@@ -179,7 +179,29 @@ Resources:
         - Key: Name
           Value: !Sub "${ProjectName}-sg-dsql-vpce"
 
-  # --- IAM for EC2 (SSM + DSQL connect) ---
+  # --- Artifact bucket (dauerhaft, CodeDeploy) ---
+  ArtifactBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub "${ProjectName}-artifacts-${AWS::AccountId}-${AWS::Region}"
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-artifacts"
+
+  # --- IAM for EC2 (SSM Debug + CodeDeploy + DSQL) ---
   Ec2Role:
     Type: AWS::IAM::Role
     Properties:
@@ -193,6 +215,7 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforAWSCodeDeploy
       Policies:
         - PolicyName: DsqlConnect
           PolicyDocument:
@@ -203,7 +226,7 @@ Resources:
                   - dsql:DbConnect
                   - dsql:DbConnectAdmin
                 Resource: "*"
-        - PolicyName: DeployArtifactRead
+        - PolicyName: ArtifactAndJwt
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
@@ -212,14 +235,67 @@ Resources:
                   - s3:GetObject
                   - s3:ListBucket
                 Resource:
-                  - !Sub "arn:aws:s3:::${ProjectName}-deploy-*"
-                  - !Sub "arn:aws:s3:::${ProjectName}-deploy-*/*"
+                  - !GetAtt ArtifactBucket.Arn
+                  - !Sub "${ArtifactBucket.Arn}/*"
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${ProjectName}/jwt-key"
 
   Ec2InstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:
       Roles:
         - !Ref Ec2Role
+
+  CodeDeployServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codedeploy.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSCodeDeployRole
+
+  CodeDeployAppBackend:
+    Type: AWS::CodeDeploy::Application
+    Properties:
+      ApplicationName: !Sub "${ProjectName}-backend"
+      ComputePlatform: Server
+
+  CodeDeployAppFrontend:
+    Type: AWS::CodeDeploy::Application
+    Properties:
+      ApplicationName: !Sub "${ProjectName}-frontend"
+      ComputePlatform: Server
+
+  CodeDeployGroupBackend:
+    Type: AWS::CodeDeploy::DeploymentGroup
+    Properties:
+      ApplicationName: !Ref CodeDeployAppBackend
+      DeploymentGroupName: backend
+      ServiceRoleArn: !GetAtt CodeDeployServiceRole.Arn
+      DeploymentConfigName: CodeDeployDefault.AllAtOnce
+      Ec2TagFilters:
+        - Key: Role
+          Value: backend
+          Type: KEY_AND_VALUE
+
+  CodeDeployGroupFrontend:
+    Type: AWS::CodeDeploy::DeploymentGroup
+    Properties:
+      ApplicationName: !Ref CodeDeployAppFrontend
+      DeploymentGroupName: frontend
+      ServiceRoleArn: !GetAtt CodeDeployServiceRole.Arn
+      DeploymentConfigName: CodeDeployDefault.AllAtOnce
+      Ec2TagFilters:
+        - Key: Role
+          Value: frontend
+          Type: KEY_AND_VALUE
 
   # --- Aurora DSQL ---
   # Bestehender Cluster wird bei Stack-Updates beibehalten; Pipeline löscht keine Daten
@@ -253,7 +329,9 @@ Resources:
   # --- EC2 Backend / Frontend ---
   BackendInstance:
     Type: AWS::EC2::Instance
-    DependsOn: AttachGateway
+    DependsOn:
+      - AttachGateway
+      - DsqlVpcEndpoint
     Properties:
       InstanceType: !Ref InstanceType
       ImageId: !Ref LatestAmiId
@@ -270,18 +348,61 @@ Resources:
         - Key: RefreshBump
           Value: !If [RefreshInstances, !Sub "${AWS::StackId}-refresh", "stable"]
       UserData:
-        Fn::Base64: !Sub |
-          #!/bin/bash
-          set -eux
-          dnf update -y || yum update -y
-          dnf install -y docker nginx git amazon-ssm-agent || yum install -y docker nginx git amazon-ssm-agent
-          systemctl enable amazon-ssm-agent || true
-          systemctl restart amazon-ssm-agent || true
-          systemctl enable docker
-          systemctl start docker
-          usermod -aG docker ec2-user || true
-          mkdir -p /opt/taetigkeitsbericht/backend
-          # Refresh marker: ${ForceInstanceRefresh}
+        Fn::Base64:
+          Fn::Sub:
+            - |
+              #!/bin/bash
+              set -eux
+              dnf update -y || yum update -y
+              dnf install -y ruby wget tar gzip amazon-ssm-agent postgresql15 \
+                || yum install -y ruby wget tar gzip amazon-ssm-agent postgresql15 \
+                || dnf install -y ruby wget tar gzip amazon-ssm-agent postgresql
+              systemctl enable amazon-ssm-agent || true
+              systemctl restart amazon-ssm-agent || true
+              cd /tmp
+              wget -q "https://aws-codedeploy-${AWS::Region}.s3.${AWS::Region}.amazonaws.com/latest/install" -O /tmp/codedeploy-install \
+                || wget -q "https://aws-codedeploy-${AWS::Region}.s3.amazonaws.com/latest/install" -O /tmp/codedeploy-install
+              chmod +x /tmp/codedeploy-install
+              /tmp/codedeploy-install auto
+              systemctl enable codedeploy-agent || true
+              systemctl start codedeploy-agent || true
+              mkdir -p /opt/taetigkeitsbericht/backend /opt/taetigkeitsbericht/scripts /etc/taetigkeitsbericht
+              cat > /etc/taetigkeitsbericht/backend.env <<'ENVEOF'
+              ASPNETCORE_ENVIRONMENT=Production
+              ASPNETCORE_URLS=http://0.0.0.0:5108
+              Database__UseDsql=true
+              Database__Host=${DsqlEndpoint}
+              Database__User=verwaltung
+              Database__Database=postgres
+              Database__MigrateOnStartup=true
+              AWS_REGION=${AWS::Region}
+              AWS_DEFAULT_REGION=${AWS::Region}
+              DSQL_ENDPOINT=${DsqlEndpoint}
+              EC2_ROLE_ARN=${Ec2RoleArn}
+              Cors__Origins__0=http://${FrontendEip}
+              HttpsRedirection__Enabled=false
+              ENVEOF
+              chmod 640 /etc/taetigkeitsbericht/backend.env
+              cat > /etc/systemd/system/taetigkeitsbericht-backend.service <<'UNITEOF'
+              [Unit]
+              Description=Taetigkeitsbericht Backend
+              After=network.target
+              [Service]
+              WorkingDirectory=/opt/taetigkeitsbericht/backend
+              ExecStart=/opt/taetigkeitsbericht/backend/Taetigkeitsbericht.Backend
+              Restart=always
+              RestartSec=5
+              EnvironmentFile=/etc/taetigkeitsbericht/backend.env
+              EnvironmentFile=-/etc/taetigkeitsbericht/jwt.env
+              [Install]
+              WantedBy=multi-user.target
+              UNITEOF
+              systemctl daemon-reload
+              # Refresh marker: ${ForceInstanceRefresh}
+            - DsqlEndpoint: !GetAtt DsqlCluster.Endpoint
+              FrontendEip: !Ref FrontendEip
+              Ec2RoleArn: !GetAtt Ec2Role.Arn
+              ForceInstanceRefresh: !Ref ForceInstanceRefresh
 
   FrontendInstance:
     Type: AWS::EC2::Instance
@@ -306,12 +427,20 @@ Resources:
           #!/bin/bash
           set -eux
           dnf update -y || yum update -y
-          dnf install -y nginx git amazon-ssm-agent || yum install -y nginx git amazon-ssm-agent
+          dnf install -y nginx ruby wget tar gzip amazon-ssm-agent \
+            || yum install -y nginx ruby wget tar gzip amazon-ssm-agent
           systemctl enable amazon-ssm-agent || true
           systemctl restart amazon-ssm-agent || true
+          cd /tmp
+          wget -q "https://aws-codedeploy-${AWS::Region}.s3.${AWS::Region}.amazonaws.com/latest/install" -O /tmp/codedeploy-install \
+            || wget -q "https://aws-codedeploy-${AWS::Region}.s3.amazonaws.com/latest/install" -O /tmp/codedeploy-install
+          chmod +x /tmp/codedeploy-install
+          /tmp/codedeploy-install auto
+          systemctl enable codedeploy-agent || true
+          systemctl start codedeploy-agent || true
+          mkdir -p /usr/share/nginx/html
           systemctl enable nginx
           systemctl start nginx
-          mkdir -p /usr/share/nginx/html
           # Refresh marker: ${ForceInstanceRefresh}
 
   # Stabile öffentliche IPs (GetAtt Instance.PublicIp schlägt fehl, wenn keine Public IP existiert)
@@ -368,3 +497,10 @@ Outputs:
   Ec2RoleArn:
     Description: Link DB role verwaltung to this IAM role via AWS IAM GRANT
     Value: !GetAtt Ec2Role.Arn
+  ArtifactBucketName:
+    Description: Dauerhafter S3-Bucket für CodeDeploy-Zips
+    Value: !Ref ArtifactBucket
+  CodeDeployBackendApp:
+    Value: !Ref CodeDeployAppBackend
+  CodeDeployFrontendApp:
+    Value: !Ref CodeDeployAppFrontend

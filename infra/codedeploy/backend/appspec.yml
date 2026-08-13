@@ -1,0 +1,21 @@
+version: 0.0
+os: linux
+files:
+  - source: app
+    destination: /opt/taetigkeitsbericht/backend
+  - source: scripts/ec2-dsql-bootstrap.sh
+    destination: /opt/taetigkeitsbericht/scripts
+file_exists_behavior: OVERWRITE
+hooks:
+  ApplicationStop:
+    - location: scripts/stop.sh
+      timeout: 60
+      runas: root
+  AfterInstall:
+    - location: scripts/after_install.sh
+      timeout: 180
+      runas: root
+  ApplicationStart:
+    - location: scripts/start.sh
+      timeout: 120
+      runas: root

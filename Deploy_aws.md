@@ -253,11 +253,13 @@ git push origin main
 
 ### 4.3 Lauf beobachten
 
-1. Job **CloudFormation VPC + EC2 + DSQL** muss grün werden.
-2. Job **Build & deploy Backend + Frontend auf EC2** danach.
-3. Am Ende die **Summary** des Runs lesen (IPs, DSQL-Endpoint, EC2-Role-ARN).
+1. Job **CloudFormation** (nur bei Infra-Änderungen oder manuell).
+2. Job **Build & CodeDeploy** (App-Code oder nach Infra).
+3. Am Ende die **Summary** des Runs lesen (IPs, Artifact-Bucket).
 
-Dauer: oft 10–20+ Minuten (EC2, DSQL, SSM-Wartezeit).
+Dauer: Infra oft 10–20+ Minuten; reines App-Deploy kürzer (Build + CodeDeploy).
+
+Beim **ersten** Lauf nach dieser Umstellung werden die EC2-Instanzen wegen neuem UserData (CodeDeploy-Agent) **einmal ersetzt**. Danach bleiben die VMs; nur die Programme werden aktualisiert.
 
 ### 4.4 Outputs nachschlagen (Konsole)
 
@@ -269,7 +271,8 @@ CloudFormation → Stack **`taetigkeitsbericht`** → **Outputs**:
 | `BackendPublicIp` | API: `http://<IP>:5108/graphql` |
 | `DsqlEndpoint` | Hostname für DB-Verbindungen |
 | `Ec2RoleArn` | Für `AWS IAM GRANT` der DB-Rolle `verwaltung` |
-| `BackendInstanceId` / `FrontendInstanceId` | SSM / EC2-Konsole |
+| `ArtifactBucketName` | S3-Bucket für CodeDeploy-Zips (wird nicht gelöscht) |
+| `CodeDeployBackendApp` / `CodeDeployFrontendApp` | CodeDeploy-Anwendungen |
 
 Mit AWS CLI (Access Keys lokal konfiguriert, z. B. `aws configure`):
 
@@ -283,57 +286,56 @@ Ohne CLI reicht die Konsole.
 
 ## Schritt 5 – Was die Pipeline konkret macht
 
-Reihenfolge bei jedem Lauf:
+Zwei Jobs, **getrennt**:
 
-1. **Access Keys:** GitHub Actions lädt `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` und spricht die AWS-API damit an.
-2. **CloudFormation deploy** von `taetigkeitsbericht-aws.yml`:
-   - VPC `10.20.0.0/16`, öffentliche und private Subnets
-   - Internet Gateway, Routing
-   - Security Groups (Frontend 80/443, Backend 80/443/5108, DSQL-Endpoint 5432 nur vom Backend)
-   - IAM Instance Profile für EC2 (SSM + `dsql:DbConnect*`)
-   - Aurora DSQL Cluster
-   - Interface VPC Endpoint (PrivateLink) mit Private DNS
-   - zwei EC2-Instanzen (Backend, Frontend)
-3. **Build:** `dotnet publish` (Backend), `npm run build` (Frontend).
-4. **S3:** Artefakte kurz in einen Staging-Bucket legen.
-5. **SSM Run Command:** auf beiden EC2s entpacken, systemd/nginx starten.
-6. Staging-Bucket wieder löschen.
+### Infra (`deploy-infra`) – nicht bei jedem UI-/API-Commit
 
-Beim **ersten** Lauf wird das Netzwerk erzeugt; bei weiteren Läufen meist nur aktualisiert bzw. die App neu ausgerollt.
+Nur wenn sich `infra/cloudformation`, `infra/scripts` oder der Workflow ändern, oder per **Run workflow**.
+
+1. Access Keys laden  
+2. CloudFormation: VPC, DSQL + PrivateLink, zwei EC2 (EIP), Artifact-Bucket, CodeDeploy-Apps, IAM  
+3. UserData installiert **CodeDeploy-Agent** (SSM-Agent nur noch für Betrieb/Debug)
+
+### Apps (`deploy-apps`) – Programme auf den bestehenden EC2
+
+1. Stack-Outputs lesen (Bucket, EIPs)  
+2. `JWT_KEY` nach SSM Parameter `/taetigkeitsbericht/jwt-key`  
+3. Backend **self-contained** `linux-x64`, Frontend mit `VITE_GRAPHQL_URL=http://<BackendEip>:5108/graphql` (Secret `BACKEND_HOST_PUBLIC` optional für eigene Domain)  
+4. Zips nach dem **dauerhaften** Artifact-Bucket  
+5. **CodeDeploy** auf die Instanzen mit Tag `Role=backend` / `Role=frontend`  
+6. Backend AfterInstall: idempotenter DSQL-Bootstrap (kein DROP) + Start; `MigrateAsync` beim Prozessstart  
+
+Die EC2-Instanzen werden dabei **nicht** neu angelegt.
 
 ---
 
 ## Schritt 6 – Aurora DSQL (automatisch in der Pipeline)
 
-Die Pipeline erledigt nach dem Stack-Deploy auf der Backend-EC2:
+Beim Backend-CodeDeploy (**AfterInstall**, nicht per SSM-Skriptliste):
 
-1. **`ec2-dsql-bootstrap.sh`**: Admin-IAM-Token → `CREATE ROLE verwaltung` → `AWS IAM GRANT` auf die EC2-Rolle → Schema-Rechte (idempotent, **kein** DROP)  
-2. **Backend-Start** mit `Database__UseDsql=true` (Paket `Amazon.AuroraDsql.*`, Token-Refresh automatisch)  
-3. **`Database__MigrateOnStartup=true`**: nur **ausstehende** EF-Core-Migrationen (`MigrateAsync`) – **keine** Neuanlage/Löschung der Datenbank  
+1. **`ec2-dsql-bootstrap.sh`**: Admin-IAM-Token → `CREATE ROLE verwaltung` → `AWS IAM GRANT` → Schema-Rechte (idempotent, **kein** DROP)  
+2. **Backend-Start** mit `Database__UseDsql=true`  
+3. **`Database__MigrateOnStartup=true`**: nur ausstehende EF-Migrationen  
 
-**Besteht der DSQL-Cluster bereits**, bleibt er erhalten (CloudFormation: `DeletionPolicy`/`UpdateReplacePolicy: Retain`, `DeletionProtectionEnabled: true`). Redeploys überschreiben keine Anwendungsdaten; Schema-Änderungen laufen nur über Migrationen.
+**Besteht der DSQL-Cluster bereits**, bleibt er erhalten (`Retain` + Deletion Protection).
 
-Manuelles SQL (nur Fallback): siehe `infra/scripts/post-dsql-setup.sql` / `ec2-dsql-bootstrap.sh`.
+Manuelles SQL (Fallback): `infra/scripts/post-dsql-setup.sql`.
 
 ### 6.1 Hinweise
 
 - DB-Name: Standard `postgres` (DSQL).  
-- Kein festes Passwort `verwaltung` im Connection-String.  
-- DSQL-DDL weicht von PostgreSQL ab; der EF-Adapter (`Amazon.AuroraDsql.EntityFrameworkCore`) passt Migrationen an.  
+- Kein festes Passwort `verwaltung`.  
+- CORS-Origin der Frontend-EIP steht in `/etc/taetigkeitsbericht/backend.env` (UserData).  
 - Docs: [Authentication tokens](https://docs.aws.amazon.com/aurora-dsql/latest/userguide/SECTION_authentication-token.html), [PrivateLink](https://docs.aws.amazon.com/aurora-dsql/latest/userguide/privatelink-managing-clusters.html).
 
 ---
 
-## Schritt 7 – Frontend-URL festlegen und erneut deployen
+## Schritt 7 – Frontend-URL (meist automatisch)
 
-Nach dem ersten erfolgreichen Deploy:
+Der App-Job setzt `VITE_GRAPHQL_URL` aus der **Backend-EIP**. Secret **`BACKEND_HOST_PUBLIC`** nur noch, wenn Sie eine eigene Domain/HTTPS nutzen.
 
-1. `BackendPublicIp` aus den Outputs nehmen.
-2. GitHub Secret **`BACKEND_HOST_PUBLIC`** setzen auf:  
-   `http://<BackendPublicIp>:5108`  
-   (ohne `/graphql`, ohne Slash am Ende oder mit – der Workflow normalisiert).
-3. Workflow **erneut** starten (Push oder Run workflow).
-4. Frontend wird mit `VITE_GRAPHQL_URL=http://…:5108/graphql` gebaut.
+CORS kommt aus UserData (`Cors__Origins__0=http://<FrontendEip>`). Nach EIP-Wechsel: Infra mit Instance-Refresh oder Env-Datei auf der Box anpassen, dann App neu ausrollen.
+
 
 Später: eigene Domain + HTTPS (ALB/Certificate Manager) und Secret entsprechend aktualisieren.
 
@@ -429,8 +431,9 @@ Actions → Run workflow → Option **`force_instance_refresh`** = true.
 | `InvalidClientTokenId` / `SignatureDoesNotMatch` | Falsche oder abgelaufene Keys; Secrets neu setzen; Key in IAM aktiv? |
 | Kein Access-Key-Button in der Konsole | Sandbox/Konto blockiert Keys – IAM-Rechte oder Konto-Typ prüfen |
 | Workflow nutzt noch `role-to-assume` / `AWS_ROLE_ARN` | Aktuellen Stand von `deploy-aws.yml` ziehen (Access Keys) |
-| SSM `InvalidInstanceId` / „not in a valid state“ | Instanz ist kein SSM Managed Node (Agent offline / kein IAM-Profil). In Console: Systems Manager → Fleet Manager. Pipeline-Wait schlägt jetzt fehl mit Diagnose. Oft: Workflow mit **`force_instance_refresh=true`** neu starten (UserData startet `amazon-ssm-agent`) |
-| CloudFormation: `Attribute 'PublicIp' does not exist` | Outputs nutzen Elastic IPs (`BackendEip`/`FrontendEip`), nicht `Instance.PublicIp`. Nach Fix erneut deployen; Secret `BACKEND_HOST_PUBLIC` ggf. an neue EIP anpassen |
+| CodeDeploy: keine Instanzen in der Deployment Group | UserData muss CodeDeploy-Agent installiert haben. Nach Template-Änderung werden EC2 **einmal ersetzt**. In der Konsole: CodeDeploy → Deployments → Fehlerlog. Workflow retried create-deployment ~10 Min |
+| SSM `InvalidInstanceId` | Releases laufen über **CodeDeploy**, nicht mehr über SSM Run Command. SSM nur noch Debug |
+| CloudFormation: `Attribute 'PublicIp' does not exist` | Outputs nutzen Elastic IPs (`BackendEip`/`FrontendEip`) |
 | CloudFormation deploy failed, Events in GitHub leer | In AWS-Konsole → CloudFormation → Stack `taetigkeitsbericht` → **Events**: Zeile mit `…_FAILED` und **Status reason** lesen. Häufig: Stack in `ROLLBACK_COMPLETE`/`UPDATE_ROLLBACK_FAILED` (Stack löschen und neu), IAM-Rolle `taetigkeitsbericht-ec2-role` existiert noch, DSQL/VPC-Endpoint-Fehler, fehlende Rechte |
 | CloudFormation IAM capability | Haken „acknowledge IAM resources“ setzen (falls manuell) |
 | SSM Instance not Online | 2–5 Min warten; Instance Profile prüfen; Instanz neu starten |
