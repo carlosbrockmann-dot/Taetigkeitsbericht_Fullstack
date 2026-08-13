@@ -57,15 +57,17 @@ internal static class DsqlSchema
             throw new InvalidOperationException($"Database:User ist kein gültiger Rollenname: {appRole}");
         }
 
-        // Jeweils eigene Transaktion: DSQL erlaubt nur ein DDL pro Transaktion.
-        await db.Database.ExecuteSqlRawAsync($"GRANT USAGE ON SCHEMA public TO {appRole}", cancellationToken);
+        // Rollenname ist per Regex geprüft; GRANT akzeptiert keine Parameter.
         await db.Database.ExecuteSqlRawAsync(
-            $"GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO {appRole}",
+            "GRANT USAGE ON SCHEMA public TO " + appRole,
+            cancellationToken);
+        await db.Database.ExecuteSqlRawAsync(
+            "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO " + appRole,
             cancellationToken);
         try
         {
             await db.Database.ExecuteSqlRawAsync(
-                $"GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO {appRole}",
+                "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO " + appRole,
                 cancellationToken);
         }
         catch (Exception ex)
