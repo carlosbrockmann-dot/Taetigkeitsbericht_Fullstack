@@ -57,8 +57,10 @@ class BackendAnwendung:
         return result
 
     def stelle_sicher_angemeldet(self) -> BackendLoginResult:
-        if self._token:
+        """Liefert ein gültiges Token; bei ungültigem Cache erneuter Login."""
+        if self._token and self._client.token_ist_gueltig(self._token):
             return BackendLoginResult(ok=True, token=self._token)
+        self._token = None
         return self.anmelden()
 
     def lade_monat_hoch(

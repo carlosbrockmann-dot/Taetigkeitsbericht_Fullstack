@@ -41,6 +41,9 @@ class IBackendApiClient(Protocol):
     def anmelden(self, benutzername: str, passwort: str) -> BackendLoginResult:
         ...
 
+    def token_ist_gueltig(self, token: str) -> bool:
+        ...
+
     def speichere_zeiteintraege(
         self, token: str, eintraege: list[Zeiteintrag] | list[ZeiteintragsDTO]
     ) -> BackendUploadResult:

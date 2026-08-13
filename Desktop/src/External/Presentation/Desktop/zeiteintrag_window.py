@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 from datetime import date, datetime
 from urllib.parse import quote, urlencode
@@ -637,7 +638,8 @@ class ZeiteintragWindow(QMainWindow):
         self._monat_abgeben_button.setEnabled(self._backend_anwendung is not None)
         self._online_ansehen_button = QPushButton("Online ansehen", self)
         self._online_ansehen_button.setToolTip(
-            "Öffnet die React-Online-Ansicht im Browser (Login am Backend, aktueller Monat/Mandant)."
+            "Öffnet die React-Online-Ansicht im Standardbrowser "
+            "(Login am Backend, aktueller Monat/Mandant)."
         )
         self._online_ansehen_button.setEnabled(self._backend_anwendung is not None)
         self._loesch_hinweis_label = QLabel(self)
@@ -1358,7 +1360,32 @@ class ZeiteintragWindow(QMainWindow):
                 "mandantId": mandant_id,
             }
         )
-        url = f"{frontend_url}/?{query}#token={quote(login.token, safe='')}"
+        # Browser-Navigation kann keine HTTP-Header setzen → Handoff wie Token im Hash:
+        # mandanten als JSON, plus Login-Benutzername aus authentication.toml.
+        mandanten_json = json.dumps(
+            [
+                {
+                    "id": m.id,
+                    "name": m.name,
+                    "kuerzel": m.kuerzel,
+                    "foregroundColor": m.foreground_color,
+                    "backgroundColor": m.background_color,
+                    "rowcounterColor": m.rowcounter_color,
+                }
+                for m in self._app_config.mandanten
+            ],
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        hash_query = urlencode(
+            {
+                "token": login.token,
+                "benutzername": self._backend_anwendung.settings.username,
+                "mandanten": mandanten_json,
+            },
+            quote_via=quote,
+        )
+        url = f"{frontend_url}/?{query}#{hash_query}"
         if not QDesktopServices.openUrl(QUrl(url)):
             self._zeige_backend_fehler(
                 f"Browser konnte nicht geöffnet werden. URL: {frontend_url}"

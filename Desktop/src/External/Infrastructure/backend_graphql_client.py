@@ -184,6 +184,25 @@ class BackendGraphQlClient:
             benutzername=login.get("benutzername"),
         )
 
+    def token_ist_gueltig(self, token: str) -> bool:
+        """Prüft per autorisierter Query, ob das JWT noch akzeptiert wird."""
+        if not token.strip():
+            return False
+        query = """
+        query TokenPruefung($von: LocalDate!, $bis: LocalDate!) {
+          zeiteintraege(von: $von, bis: $bis) { id }
+        }
+        """
+        try:
+            self._post(
+                query,
+                {"von": "2099-01-01", "bis": "2099-01-01"},
+                token=token,
+            )
+            return True
+        except BackendApiError:
+            return False
+
     def speichere_zeiteintraege(
         self, token: str, eintraege: list[Zeiteintrag] | list[ZeiteintragsDTO]
     ) -> BackendUploadResult:

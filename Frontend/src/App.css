@@ -33,6 +33,13 @@ body {
   padding: 1.5rem 1.25rem 2.5rem;
 }
 
+.header-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
 .header h1 {
   margin: 0;
   font-size: 1.65rem;
@@ -40,10 +47,146 @@ body {
   letter-spacing: -0.02em;
 }
 
+.header-title-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.header-title-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.header-menu {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.header-menu-button {
+  appearance: none;
+  border: 1px solid #5c7a9a;
+  background: #f5f8fc;
+  color: #1c2a3a;
+  border-radius: 6px;
+  width: 2.1rem;
+  height: 2.1rem;
+  padding: 0;
+  font: inherit;
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.header-menu-button:hover {
+  background: #d6e4f2;
+}
+
+.header-menu-list {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.35rem);
+  z-index: 20;
+  margin: 0;
+  padding: 0.35rem 0;
+  list-style: none;
+  min-width: 12rem;
+  background: #f8fafc;
+  border: 1px solid #bbcada;
+  border-radius: 8px;
+  box-shadow: 0 8px 20px rgba(28, 42, 58, 0.12);
+}
+
+.header-menu-list a {
+  display: block;
+  padding: 0.45rem 0.85rem;
+  color: #1c2a3a;
+  text-decoration: none;
+  font-size: 0.92rem;
+}
+
+.header-menu-list a:hover,
+.header-menu-list a.active {
+  background: #d6e4f2;
+}
+
+.disclaimer {
+  margin-top: 1.25rem;
+}
+
+.disclaimer h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.25rem;
+}
+
+.disclaimer h3 {
+  margin: 1.25rem 0 0.4rem;
+  font-size: 1.05rem;
+}
+
+.disclaimer p,
+.disclaimer li {
+  color: #2a3a4a;
+}
+
+.disclaimer ul {
+  margin: 0.35rem 0 0;
+  padding-left: 1.25rem;
+}
+
 .sub {
   margin: 0.35rem 0 0;
   color: #405060;
   font-size: 0.95rem;
+}
+
+.header-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+
+.header-meta-left {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.5rem;
+  min-width: 0;
+}
+
+.meta-sep {
+  color: #7a8fa5;
+}
+
+.mandant-select-label {
+  display: inline-flex;
+  align-items: center;
+  margin-left: auto;
+}
+
+.mandant-select {
+  font: inherit;
+  border: 1px solid #5c7a9a;
+  border-radius: 6px;
+  padding: 0.2rem 0.45rem;
+  max-width: min(100%, 22rem);
+}
+
+.mandant-select option {
+  font: inherit;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .month-nav {
@@ -129,6 +272,16 @@ tbody tr.wochenende {
 tbody tr.wochenende td:first-child {
   font-weight: 600;
   color: #3a5270;
+}
+
+td.kategorie-urlaub {
+  color: #1a4fb8;
+  font-weight: 700;
+}
+
+td.kategorie-krankheit {
+  color: #b01020;
+  font-weight: 700;
 }
 
 .linkish {
