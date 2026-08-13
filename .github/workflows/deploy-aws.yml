@@ -41,12 +41,12 @@ jobs:
           filters: |
             infra:
               - "infra/cloudformation/**"
-              - "infra/scripts/**"
               - ".github/workflows/deploy-aws.yml"
             apps:
               - "Backend/**"
               - "Frontend/**"
               - "infra/codedeploy/**"
+              - "infra/scripts/**"
               - ".github/workflows/deploy-aws.yml"
 
   deploy-infra:
@@ -292,18 +292,63 @@ jobs:
           set -euo pipefail
           aws s3 cp artifacts/backend-codedeploy.zip "s3://${BUCKET}/backend.zip"
           aws s3 cp artifacts/frontend-codedeploy.zip "s3://${BUCKET}/frontend.zip"
+          aws s3 cp infra/scripts/ensure-codedeploy-agent.sh "s3://${BUCKET}/ensure-codedeploy-agent.sh"
 
-      - name: Wait for EC2 instance status
+      - name: Ensure CodeDeploy agent on EC2 (SSM)
+        env:
+          BUCKET: ${{ steps.stack.outputs.bucket }}
         run: |
           set -euo pipefail
           get() { aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
             --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" --output text; }
           BE="$(get BackendInstanceId)"
           FE="$(get FrontendInstanceId)"
-          echo "Warte auf instance-status-ok: $BE $FE"
+          echo "Backend=$BE Frontend=$FE"
           aws ec2 wait instance-status-ok --instance-ids "$BE" "$FE"
-          echo "Instanzen ok – 45s für CodeDeploy-Agent-Polling"
-          sleep 45
+          for ID in "$BE" "$FE"; do
+            echo "Warte auf SSM Online: $ID"
+            ONLINE=0
+            for i in $(seq 1 36); do
+              STATUS=$(aws ssm describe-instance-information \
+                --filters "Key=InstanceIds,Values=$ID" \
+                --query "InstanceInformationList[0].PingStatus" --output text 2>/dev/null || true)
+              echo "  $i/36 PingStatus=${STATUS:-empty}"
+              if [ "$STATUS" = "Online" ]; then ONLINE=1; break; fi
+              sleep 10
+            done
+            if [ "$ONLINE" != "1" ]; then
+              echo "::error::SSM nicht Online für $ID. CodeDeploy-Agent kann so nicht nachinstalliert werden."
+              echo "In GitHub: Run workflow mit force_instance_refresh=true (neue EC2, UserData installiert den Agent)."
+              echo "VM nicht von Hand anlegen – CloudFormation soll die Instanzen besitzen."
+              exit 1
+            fi
+          done
+
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "$BE" "$FE" \
+            --document-name "AWS-RunShellScript" \
+            --comment "Ensure CodeDeploy agent" \
+            --parameters commands="[
+              \"set -eux\",
+              \"aws s3 cp s3://${BUCKET}/ensure-codedeploy-agent.sh /tmp/ensure-codedeploy-agent.sh\",
+              \"chmod +x /tmp/ensure-codedeploy-agent.sh\",
+              \"/tmp/ensure-codedeploy-agent.sh\"
+            ]" \
+            --query "Command.CommandId" --output text)
+          echo "SSM CommandId=$COMMAND_ID"
+          for ID in "$BE" "$FE"; do
+            aws ssm wait command-executed --command-id "$COMMAND_ID" --instance-id "$ID" || true
+            ST=$(aws ssm get-command-invocation --command-id "$COMMAND_ID" --instance-id "$ID" \
+              --query "Status" --output text)
+            aws ssm get-command-invocation --command-id "$COMMAND_ID" --instance-id "$ID" \
+              --query "[Status,StandardOutputContent,StandardErrorContent]" --output text
+            if [ "$ST" != "Success" ]; then
+              echo "::error::CodeDeploy-Agent-Setup fehlgeschlagen auf $ID ($ST)"
+              exit 1
+            fi
+          done
+          echo "Agent auf beiden Instanzen aktiv – 20s Polling"
+          sleep 20
 
       - name: Deploy Backend via CodeDeploy
         env:
