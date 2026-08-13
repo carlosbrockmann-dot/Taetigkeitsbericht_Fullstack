@@ -100,13 +100,15 @@ jobs:
               echo "=== Stack-Status ==="
               aws cloudformation describe-stacks --stack-name "${STACK_NAME}" \
                 --query "Stacks[0].[StackStatus,StackStatusReason]" --output text 2>/dev/null || echo "(kein Stack)"
-              echo "=== FAILED-Events (ResourceStatusReason) ==="
+              echo "=== FAILED-Events (text) ==="
               aws cloudformation describe-stack-events --stack-name "${STACK_NAME}" \
-                --output table 2>/dev/null | grep -E "FAILED|Timestamp|Logical" | head -n 40 \
+                --output text 2>/dev/null \
+                | awk '/FAILED/ {print; c=2} c&&c--' \
+                | head -n 60 \
                 || echo "(keine FAILED-Events / kein Stack)"
-              echo "=== Letzte Events (table) ==="
+              echo "=== Letzte Events (text, max 20 Zeilen) ==="
               aws cloudformation describe-stack-events --stack-name "${STACK_NAME}" \
-                --max-items 12 --output table 2>/dev/null || true
+                --output text 2>/dev/null | head -n 20 || true
             } | tee "$GITHUB_STEP_SUMMARY" >&2
             exit 1
           fi

@@ -429,6 +429,7 @@ Actions → Run workflow → Option **`force_instance_refresh`** = true.
 | `InvalidClientTokenId` / `SignatureDoesNotMatch` | Falsche oder abgelaufene Keys; Secrets neu setzen; Key in IAM aktiv? |
 | Kein Access-Key-Button in der Konsole | Sandbox/Konto blockiert Keys – IAM-Rechte oder Konto-Typ prüfen |
 | Workflow nutzt noch `role-to-assume` / `AWS_ROLE_ARN` | Aktuellen Stand von `deploy-aws.yml` ziehen (Access Keys) |
+| CloudFormation: `Attribute 'PublicIp' does not exist` | Outputs nutzen Elastic IPs (`BackendEip`/`FrontendEip`), nicht `Instance.PublicIp`. Nach Fix erneut deployen; Secret `BACKEND_HOST_PUBLIC` ggf. an neue EIP anpassen |
 | CloudFormation deploy failed, Events in GitHub leer | In AWS-Konsole → CloudFormation → Stack `taetigkeitsbericht` → **Events**: Zeile mit `…_FAILED` und **Status reason** lesen. Häufig: Stack in `ROLLBACK_COMPLETE`/`UPDATE_ROLLBACK_FAILED` (Stack löschen und neu), IAM-Rolle `taetigkeitsbericht-ec2-role` existiert noch, DSQL/VPC-Endpoint-Fehler, fehlende Rechte |
 | CloudFormation IAM capability | Haken „acknowledge IAM resources“ setzen (falls manuell) |
 | SSM Instance not Online | 2–5 Min warten; Instance Profile prüfen; Instanz neu starten |

@@ -253,6 +253,7 @@ Resources:
   # --- EC2 Backend / Frontend ---
   BackendInstance:
     Type: AWS::EC2::Instance
+    DependsOn: AttachGateway
     Properties:
       InstanceType: !Ref InstanceType
       ImageId: !Ref LatestAmiId
@@ -282,6 +283,7 @@ Resources:
 
   FrontendInstance:
     Type: AWS::EC2::Instance
+    DependsOn: AttachGateway
     Properties:
       InstanceType: !Ref InstanceType
       ImageId: !Ref LatestAmiId
@@ -308,6 +310,37 @@ Resources:
           mkdir -p /usr/share/nginx/html
           # Refresh marker: ${ForceInstanceRefresh}
 
+  # Stabile öffentliche IPs (GetAtt Instance.PublicIp schlägt fehl, wenn keine Public IP existiert)
+  BackendEip:
+    Type: AWS::EC2::EIP
+    DependsOn: AttachGateway
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-backend-eip"
+
+  BackendEipAssociation:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      AllocationId: !GetAtt BackendEip.AllocationId
+      InstanceId: !Ref BackendInstance
+
+  FrontendEip:
+    Type: AWS::EC2::EIP
+    DependsOn: AttachGateway
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-frontend-eip"
+
+  FrontendEipAssociation:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      AllocationId: !GetAtt FrontendEip.AllocationId
+      InstanceId: !Ref FrontendInstance
+
 Outputs:
   VpcId:
     Value: !Ref Vpc
@@ -316,9 +349,11 @@ Outputs:
   FrontendInstanceId:
     Value: !Ref FrontendInstance
   BackendPublicIp:
-    Value: !GetAtt BackendInstance.PublicIp
+    Description: Elastic IP of backend EC2
+    Value: !Ref BackendEip
   FrontendPublicIp:
-    Value: !GetAtt FrontendInstance.PublicIp
+    Description: Elastic IP of frontend EC2
+    Value: !Ref FrontendEip
   DsqlClusterArn:
     Value: !Ref DsqlCluster
   DsqlEndpoint:
