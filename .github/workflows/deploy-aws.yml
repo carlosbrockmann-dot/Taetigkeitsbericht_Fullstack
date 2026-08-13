@@ -35,7 +35,7 @@ jobs:
       apps: ${{ steps.filter.outputs.apps }}
     steps:
       - uses: actions/checkout@v5
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@v4
         id: filter
         with:
           filters: |
@@ -236,13 +236,45 @@ jobs:
       - name: Pack CodeDeploy bundles
         run: |
           set -euo pipefail
-          mkdir -p dist/backend/app dist/backend/scripts dist/frontend/dist dist/frontend/scripts
+          get() { aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
+            --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" --output text; }
+          DSQL_ENDPOINT="$(get DsqlEndpoint)"
+          EC2_ROLE_ARN="$(get Ec2RoleArn)"
+          FRONTEND_IP="${{ steps.stack.outputs.frontend_ip }}"
+          BACKEND_IP="${{ steps.stack.outputs.backend_ip }}"
+          if [ -z "$DSQL_ENDPOINT" ] || [ "$DSQL_ENDPOINT" = "None" ]; then
+            echo "::error::DsqlEndpoint fehlt im Stack"
+            exit 1
+          fi
+          mkdir -p dist/backend/app dist/backend/scripts dist/backend/config \
+                   dist/frontend/dist dist/frontend/scripts
           cp -a artifacts/backend/. dist/backend/app/
+          chmod +x dist/backend/app/Taetigkeitsbericht.Backend || true
           cp infra/codedeploy/backend/appspec.yml dist/backend/appspec.yml
           cp infra/codedeploy/backend/scripts/*.sh dist/backend/scripts/
+          cp infra/codedeploy/backend/taetigkeitsbericht-backend.service dist/backend/scripts/
           cp infra/scripts/ec2-dsql-bootstrap.sh dist/backend/scripts/ec2-dsql-bootstrap.sh
+          umask 077
+          {
+            echo "ASPNETCORE_ENVIRONMENT=Production"
+            echo "ASPNETCORE_URLS=http://0.0.0.0:5108"
+            echo "Database__UseDsql=true"
+            echo "Database__Host=${DSQL_ENDPOINT}"
+            echo "Database__User=verwaltung"
+            echo "Database__Database=postgres"
+            echo "Database__MigrateOnStartup=true"
+            echo "DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=true"
+            echo "AWS_REGION=${AWS_REGION}"
+            echo "AWS_DEFAULT_REGION=${AWS_REGION}"
+            echo "DSQL_ENDPOINT=${DSQL_ENDPOINT}"
+            echo "EC2_ROLE_ARN=${EC2_ROLE_ARN}"
+            echo "Cors__Origins__0=http://${FRONTEND_IP}"
+            echo "HttpsRedirection__Enabled=false"
+            echo "EmailConfirmation__ConfirmationBaseUrl=http://${BACKEND_IP}:5108"
+          } > dist/backend/config/backend.env
+          chmod 640 dist/backend/config/backend.env
           chmod +x dist/backend/scripts/*.sh
-          sed -i 's/\r$//' dist/backend/appspec.yml dist/backend/scripts/*.sh
+          sed -i 's/\r$//' dist/backend/appspec.yml dist/backend/scripts/* dist/backend/config/backend.env
           (cd dist/backend && zip -qr ../../artifacts/backend-codedeploy.zip .)
 
           cp -a Frontend/dist/. dist/frontend/dist/
@@ -251,6 +283,7 @@ jobs:
           chmod +x dist/frontend/scripts/*.sh
           sed -i 's/\r$//' dist/frontend/appspec.yml dist/frontend/scripts/*.sh
           (cd dist/frontend && zip -qr ../../artifacts/frontend-codedeploy.zip .)
+          echo "Bundles gepackt (DSQL-Host ${#DSQL_ENDPOINT} Zeichen, nicht geloggt)"
 
       - name: Upload bundles to artifact bucket
         env:
@@ -292,14 +325,16 @@ jobs:
           echo "DeploymentId=$DEP_ID"
           if ! aws deploy wait deployment-successful --deployment-id "$DEP_ID"; then
             echo "::error::Backend CodeDeploy $DEP_ID Failed"
-            aws deploy get-deployment --deployment-id "$DEP_ID" \
-              --query "deploymentInfo.{Status:status,Error:errorInformation}" --output json || true
-            TID=$(aws deploy list-deployment-targets --deployment-id "$DEP_ID" \
-              --query "targetIds[0]" --output text 2>/dev/null || true)
-            if [ -n "$TID" ] && [ "$TID" != "None" ]; then
-              aws deploy get-deployment-target --deployment-id "$DEP_ID" --target-id "$TID" \
-                --query "deploymentTarget.instanceTarget.{Status:status,LifecycleEvents:lifecycleEvents}" --output json || true
-            fi
+            echo "=== get-deployment ==="
+            aws deploy get-deployment --deployment-id "$DEP_ID" --output json || true
+            echo "=== instances ==="
+            aws deploy list-deployment-instances --deployment-id "$DEP_ID" --output json || true
+            for iid in $(aws deploy list-deployment-instances --deployment-id "$DEP_ID" --query "instancesList[]" --output text 2>/dev/null || true); do
+              echo "=== instance $iid ==="
+              aws deploy get-deployment-instance --deployment-id "$DEP_ID" --instance-id "$iid" --output json || true
+            done
+            echo "=== targets ==="
+            aws deploy list-deployment-targets --deployment-id "$DEP_ID" --output json || true
             exit 1
           fi
 

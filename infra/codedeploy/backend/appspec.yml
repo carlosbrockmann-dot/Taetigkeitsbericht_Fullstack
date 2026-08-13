@@ -5,6 +5,10 @@ files:
     destination: /opt/taetigkeitsbericht/backend
   - source: scripts/ec2-dsql-bootstrap.sh
     destination: /opt/taetigkeitsbericht/scripts
+  - source: config
+    destination: /etc/taetigkeitsbericht
+  - source: scripts/taetigkeitsbericht-backend.service
+    destination: /etc/systemd/system
 file_exists_behavior: OVERWRITE
 hooks:
   ApplicationStop:

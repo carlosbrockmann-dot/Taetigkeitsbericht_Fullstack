@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
+export PATH="/usr/local/bin:/usr/bin:/bin:$PATH"
 
 PARAM="${JWT_SSM_PARAMETER:-/taetigkeitsbericht/jwt-key}"
-REGION="${AWS_REGION:-${AWS_DEFAULT_REGION:-}}"
 
 if [ -f /etc/taetigkeitsbericht/backend.env ]; then
   set -a
@@ -10,7 +10,12 @@ if [ -f /etc/taetigkeitsbericht/backend.env ]; then
   source /etc/taetigkeitsbericht/backend.env
   set +a
 fi
-REGION="${AWS_REGION:-${AWS_DEFAULT_REGION:-${REGION:-}}}"
+REGION="${AWS_REGION:-${AWS_DEFAULT_REGION:-}}"
+: "${REGION:?AWS_REGION fehlt (backend.env)}"
+
+if [ -f scripts/taetigkeitsbericht-backend.service ]; then
+  install -m 644 scripts/taetigkeitsbericht-backend.service /etc/systemd/system/taetigkeitsbericht-backend.service
+fi
 
 if ! aws ssm get-parameter --name "$PARAM" --with-decryption --region "$REGION" \
      --query Parameter.Value --output text > /tmp/jwt.val; then
@@ -45,6 +50,7 @@ if [ "$ok" != "1" ]; then
   echo "FEHLER: Backend-Dienst nicht active" >&2
   systemctl status taetigkeitsbericht-backend --no-pager -l || true
   journalctl -u taetigkeitsbericht-backend -n 120 --no-pager || true
+  ls -la /opt/taetigkeitsbericht/backend | head || true
   exit 1
 fi
 

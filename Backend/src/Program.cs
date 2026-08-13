@@ -172,9 +172,7 @@ if (databaseOptions.MigrateOnStartup)
     app.Logger.LogInformation("Migrationen abgeschlossen.");
 }
 
-var enableHttpsRedirection = app.Configuration.GetValue(
-    "HttpsRedirection:Enabled",
-    app.Environment.IsDevelopment());
+var enableHttpsRedirection = app.Configuration.GetValue("HttpsRedirection:Enabled", false);
 if (enableHttpsRedirection)
 {
     app.UseHttpsRedirection();

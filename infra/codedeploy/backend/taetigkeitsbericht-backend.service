@@ -1,0 +1,18 @@
+[Unit]
+Description=Taetigkeitsbericht Backend
+After=network.target
+
+[Service]
+WorkingDirectory=/opt/taetigkeitsbericht/backend
+ExecStart=/opt/taetigkeitsbericht/backend/Taetigkeitsbericht.Backend --urls=http://0.0.0.0:5108
+Restart=always
+RestartSec=5
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=ASPNETCORE_URLS=http://0.0.0.0:5108
+Environment=DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=true
+Environment=HttpsRedirection__Enabled=false
+EnvironmentFile=/etc/taetigkeitsbericht/backend.env
+EnvironmentFile=-/etc/taetigkeitsbericht/jwt.env
+
+[Install]
+WantedBy=multi-user.target
