@@ -59,6 +59,7 @@ public class ZeiteintragRepository : IZeiteintragRepository
     {
         var query = _db.Zeiteintraege
             .AsNoTracking()
+            .Include(z => z.Mitarbeiter)
             .Where(z => z.MitarbeiterId == mitarbeiterId);
 
         if (mandantId is not null)
@@ -76,9 +77,16 @@ public class ZeiteintragRepository : IZeiteintragRepository
             query = query.Where(z => z.Datum <= bis);
         }
 
-        return await query
+        var liste = await query
             .OrderBy(z => z.Datum)
             .ThenBy(z => z.UhrzeitVon)
             .ToListAsync(cancellationToken);
+
+        foreach (var eintrag in liste)
+        {
+            eintrag.MitarbeiterName = eintrag.Mitarbeiter?.Benutzername;
+        }
+
+        return liste;
     }
 }

@@ -171,6 +171,7 @@ In `appsettings.json` unter `Cors:Origins` (Standard: `http://localhost:5173`, `
 | `Anmerkung` | string? | max. 80 Zeichen |
 | `MandantId` | int? | optional |
 | `MitarbeiterId` | int | aus JWT |
+| `MitarbeiterName` | string? | nur Query `zeiteintraege`: Benutzername aus Tabelle `mitarbeiter` |
 
 GraphQL-Input: `kategorie` optional (Default Arbeitstag); fehlende Uhrzeiten sind erlaubt.
 
@@ -211,13 +212,34 @@ mutation Login($input: LoginRequestInput!) {
 }
 ```
 
-JWT in GraphiQL: unten bei **Headers** z. B.
+### Token in GraphiQL holen
+
+1. GraphiQL öffnen (`/graphiql`).
+2. Login-Mutation ausführen (Konto muss E-Mail-bestätigt sein), z. B.:
+
+```graphql
+mutation MyMutation {
+  login(input: { benutzername: "kindergarten", passwort: "kindergarten" }) {
+    error
+    login {
+      benutzername
+      token
+    }
+  }
+}
+```
+
+3. Aus der Antwort den Wert von `login.token` kopieren.
+4. Unten bei **Headers** den JWT (und ggf. weitere Header) setzen, z. B.:
 
 ```json
 {
-  "Authorization": "Bearer EYER_TOKEN_HIER"
+  "Authorization": "Bearer DEIN_TOKEN",
+  "X-Custom": "123"
 }
 ```
+
+Danach funktionieren geschützte Queries/Mutationen in derselben GraphiQL-Session.
 
 ## GraphiQL
 

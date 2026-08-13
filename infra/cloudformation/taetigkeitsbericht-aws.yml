@@ -228,7 +228,7 @@ Resources:
       DeletionProtectionEnabled: false
       Tags:
         - Key: Name
-          Value: !Sub "${ProjectName}-dsql"
+          Value: taetigkeitsbericht-fullstack-dsql
         - Key: DatabaseIntent
           Value: Taetigkeitsbericht
 

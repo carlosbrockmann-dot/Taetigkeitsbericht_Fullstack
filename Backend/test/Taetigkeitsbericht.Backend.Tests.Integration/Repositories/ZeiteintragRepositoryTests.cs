@@ -64,6 +64,7 @@ public class ZeiteintragRepositoryTests : IAsyncLifetime
         gefiltert.Should().HaveCount(2);
         gefiltert.Select(z => z.Datum).Should().BeInAscendingOrder();
         gefiltert.Should().OnlyContain(z => z.MandantId == 1);
+        gefiltert.Should().OnlyContain(z => z.MitarbeiterName == "testuser");
     }
 
     [Fact]

@@ -20,6 +20,10 @@ public class Zeiteintrag
     [GraphQLIgnore]
     public Mitarbeiter? Mitarbeiter { get; set; }
 
+    /// <summary>Benutzername des Mitarbeiters (nur für Abfragen, nicht persistiert).</summary>
+    [NotMapped]
+    public string? MitarbeiterName { get; set; }
+
     public int? MandantId { get; set; }
 
     public DateOnly Datum { get; set; }
