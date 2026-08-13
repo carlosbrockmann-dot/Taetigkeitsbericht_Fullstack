@@ -1,9 +1,11 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Text;
+using Amazon.AuroraDsql.EntityFrameworkCore.Extensions;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Taetigkeitsbericht.Backend;
 using Taetigkeitsbericht.Backend.Data;
 using Taetigkeitsbericht.Backend.GraphQL;
 using Taetigkeitsbericht.Backend.Models;
@@ -16,9 +18,37 @@ builder.Services.Configure<EmailConfirmationOptions>(
     builder.Configuration.GetSection(EmailConfirmationOptions.SectionName));
 builder.Services.Configure<SmtpEmailOptions>(
     builder.Configuration.GetSection(SmtpEmailOptions.SectionName));
+builder.Services.Configure<DatabaseOptions>(
+    builder.Configuration.GetSection(DatabaseOptions.SectionName));
 
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+var databaseOptions = builder.Configuration
+    .GetSection(DatabaseOptions.SectionName)
+    .Get<DatabaseOptions>() ?? new DatabaseOptions();
+
+if (databaseOptions.UseDsql)
+{
+    if (string.IsNullOrWhiteSpace(databaseOptions.Host))
+    {
+        throw new InvalidOperationException(
+            "Database:UseDsql=true erfordert Database:Host (DSQL-Endpoint).");
+    }
+
+    builder.Services.AddDsqlDataSource(
+        databaseOptions.Host,
+        cfg =>
+        {
+            cfg.User = databaseOptions.User;
+            cfg.Database = databaseOptions.Database;
+            cfg.Port = databaseOptions.Port;
+            cfg.OrmPrefix = "efcore";
+        });
+    builder.Services.AddDbContext<AppDbContext>((sp, options) => options.UseDsql(sp));
+}
+else
+{
+    builder.Services.AddDbContext<AppDbContext>(options =>
+        options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+}
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IMitarbeiterRepository, MitarbeiterRepository>();
@@ -126,6 +156,20 @@ var app = builder.Build();
         !string.IsNullOrWhiteSpace(smtp.From),
         !string.IsNullOrWhiteSpace(smtp.UserName),
         !string.IsNullOrWhiteSpace(smtp.Password));
+    app.Logger.LogInformation(
+        "Datenbank: UseDsql={UseDsql}, Host={Host}, MigrateOnStartup={Migrate}",
+        databaseOptions.UseDsql,
+        databaseOptions.UseDsql ? databaseOptions.Host : "(ConnectionStrings:DefaultConnection)",
+        databaseOptions.MigrateOnStartup);
+}
+
+if (databaseOptions.MigrateOnStartup)
+{
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    app.Logger.LogInformation("Führe EF-Core-Migrationen aus…");
+    await db.Database.MigrateAsync();
+    app.Logger.LogInformation("Migrationen abgeschlossen.");
 }
 
 app.UseHttpsRedirection();

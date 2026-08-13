@@ -18,7 +18,7 @@ ASP.NET-Core-API mit **Hot Chocolate** GraphQL zum Empfang und zur Speicherung h
 | API | Hot Chocolate GraphQL; Minimal-API nur für E-Mail-Confirm |
 | Persistenz | EF Core + Npgsql |
 | DB On-Premises | PostgreSQL |
-| DB AWS | Aurora DSQL (geplant, gleicher Connection-String-Ansatz) |
+| DB AWS | Aurora DSQL (`Database:UseDsql` + IAM-Tokens via `Amazon.AuroraDsql.*`) |
 | Auth | JWT Bearer, `PasswordHasher`, E-Mail-Bestätigungstoken |
 | E-Mail | MailKit SMTP; bei `Smtp:Enabled=false` nur Log + Datei |
 
@@ -255,7 +255,8 @@ In `appsettings.json` / `appsettings.Development.json` stehen **keine** Passwör
 
 | Schlüssel | Wo | Zweck |
 |-----------|-----|--------|
-| `ConnectionStrings:DefaultConnection` | appsettings | PostgreSQL |
+| `ConnectionStrings:DefaultConnection` | appsettings | PostgreSQL (lokal, `Database:UseDsql=false`) |
+| `Database:UseDsql`, `Host`, `MigrateOnStartup`, … | appsettings / Env | AWS: DSQL + Migrationen beim Start |
 | `Jwt:*` | appsettings (Prod: Secret Store) | Token-Signierung |
 | `EmailConfirmation:ConfirmationBaseUrl` | appsettings / Launch-Profil | Basis-URL im Bestätigungslink (`http://localhost:5108` bzw. HTTPS-Profil `https://localhost:7022`) |
 | `EmailConfirmation:TokenExpiresHours` | appsettings | Gültigkeit des Tokens |
@@ -332,10 +333,10 @@ Fehler beim SMTP-Versand erscheinen in der GraphQL-Antwort / im Log (`E-Mail kon
 | **On-Premises** | PostgreSQL |
 | **AWS** | Aurora DSQL |
 
-- Umschaltung über Connection String / Umgebung
-- **AWS:** DB-Zugriff über **VPC + PrivateLink** (kein öffentlicher DB-Port); siehe [infra/README.md](../infra/README.md)
-- **CI/CD:** Push auf `main` → [`.github/workflows/deploy-aws.yml`](../.github/workflows/deploy-aws.yml) (CloudFormation + EC2-Deploy)
-- Aurora DSQL authentifiziert mit **IAM-Tokens**, nicht mit festem DB-Passwort
+- Lokal: `ConnectionStrings:DefaultConnection`. AWS: `Database__UseDsql=true` + `Database__Host` (IAM-Tokens, kein festes DB-Passwort)
+- Pipeline: `ec2-dsql-bootstrap.sh` (Rolle/`AWS IAM GRANT`) → Backend mit `Database__MigrateOnStartup=true`
+- **AWS:** DB-Zugriff über **VPC + PrivateLink**; siehe [infra/README.md](../infra/README.md)
+- **CI/CD:** [`.github/workflows/deploy-aws.yml`](../.github/workflows/deploy-aws.yml)
 - API von außen per HTTPS (z. B. Port 80/443 bzw. 5108) für Frontend und Desktop
 - Introspection in Production standardmäßig aus (`DisableIntrospection`)
 

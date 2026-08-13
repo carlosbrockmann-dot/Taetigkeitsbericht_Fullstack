@@ -84,23 +84,47 @@ jobs:
             PARAMS+=("KeyName=${{ secrets.EC2_KEY_NAME }}")
           fi
 
+          echo "Region=${AWS_REGION} Stack=${STACK_NAME}"
+          aws cloudformation describe-stacks --stack-name "${STACK_NAME}" \
+            --query "Stacks[0].[StackName,StackStatus,StackStatusReason]" --output text 2>/dev/null \
+            || echo "Stack existiert noch nicht (Create)."
+
           if ! aws cloudformation deploy \
             --stack-name "${STACK_NAME}" \
             --template-file infra/cloudformation/taetigkeitsbericht-aws.yml \
             --capabilities CAPABILITY_NAMED_IAM \
             --no-fail-on-empty-changeset \
             --parameter-overrides "${PARAMS[@]}"; then
-            echo "::error::CloudFormation deploy fehlgeschlagen – letzte Events:"
-            aws cloudformation describe-stack-events \
-              --stack-name "${STACK_NAME}" \
-              --max-items 20 \
-              --query "StackEvents[].[Timestamp,ResourceStatus,LogicalResourceId,ResourceStatusReason]" \
-              --output table || true
-            aws cloudformation describe-events \
-              --stack-name "${STACK_NAME}" \
-              --filter FailedEvents=true \
-              --query "OperationEvents[].[Timestamp,ValidationName,ValidationStatusReason,ValidationPath,LogicalResourceId]" \
-              --output table || true
+            {
+              echo "::error::CloudFormation deploy fehlgeschlagen"
+              echo "=== Stack-Status ==="
+              aws cloudformation describe-stacks --stack-name "${STACK_NAME}" \
+                --query "Stacks[0].[StackStatus,StackStatusReason]" --output text 2>/dev/null || echo "(kein Stack)"
+              echo "=== FAILED-Events (ResourceStatusReason) ==="
+              aws cloudformation describe-stack-events --stack-name "${STACK_NAME}" --output json 2>/dev/null \
+                | python3 -c '
+import json,sys
+data=json.load(sys.stdin)
+events=data.get("StackEvents") or []
+failed=[e for e in events if "FAILED" in (e.get("ResourceStatus") or "")]
+if not failed:
+    print("(keine FAILED-Events – ggf. Change-Set-/Validierungsfehler oben in der aws-Ausgabe)")
+for e in failed[:15]:
+    print(e.get("Timestamp"), e.get("ResourceStatus"), e.get("LogicalResourceId"))
+    print("  Reason:", (e.get("ResourceStatusReason") or "").replace("\n"," "))
+'
+              echo "=== Letzte 12 Events ==="
+              aws cloudformation describe-stack-events --stack-name "${STACK_NAME}" --output json 2>/dev/null \
+                | python3 -c '
+import json,sys
+data=json.load(sys.stdin)
+for e in (data.get("StackEvents") or [])[:12]:
+    print(e.get("Timestamp"), e.get("ResourceStatus"), e.get("LogicalResourceId"))
+    reason=(e.get("ResourceStatusReason") or "")
+    if reason:
+        print("  ", reason[:300].replace("\n"," "))
+' || true
+            } | tee "$GITHUB_STEP_SUMMARY" >&2
             exit 1
           fi
 
@@ -190,6 +214,7 @@ jobs:
           mkdir -p dist
           tar -czf dist/backend.tar.gz -C artifacts/backend .
           tar -czf dist/frontend.tar.gz -C Frontend/dist .
+          cp infra/scripts/ec2-dsql-bootstrap.sh dist/ec2-dsql-bootstrap.sh
 
       - name: Upload artifacts to S3 staging
         id: s3
@@ -207,6 +232,7 @@ jobs:
           fi
           aws s3 cp dist/backend.tar.gz "s3://${BUCKET}/backend.tar.gz"
           aws s3 cp dist/frontend.tar.gz "s3://${BUCKET}/frontend.tar.gz"
+          aws s3 cp dist/ec2-dsql-bootstrap.sh "s3://${BUCKET}/ec2-dsql-bootstrap.sh"
           echo "bucket=${BUCKET}" >> "$GITHUB_OUTPUT"
 
       - name: Wait for SSM on instances
@@ -227,7 +253,7 @@ jobs:
             done
           done
 
-      - name: Deploy Backend via SSM
+      - name: Deploy Backend + DSQL bootstrap + migrate via SSM
         env:
           INSTANCE_ID: ${{ needs.deploy-infra.outputs.backend_instance_id }}
           BUCKET: ${{ steps.s3.outputs.bucket }}
@@ -238,27 +264,87 @@ jobs:
             echo "::error::DSQL_ENDPOINT ist leer"
             exit 1
           fi
+          if [ -z "${EC2_ROLE_ARN:-}" ]; then
+            echo "::error::EC2_ROLE_ARN ist leer"
+            exit 1
+          fi
+
+          # SSM-Befehle als JSON-Datei (weniger Quoting-Probleme)
+          python3 <<'PY'
+          import json, os
+          bucket = os.environ["BUCKET"]
+          jwt = os.environ["JWT_KEY"]
+          dsql = os.environ["DSQL_ENDPOINT"]
+          role = os.environ["EC2_ROLE_ARN"]
+          region = os.environ["AWS_REGION"]
+          # systemd Environment-Werte: Anführungszeichen escapen
+          def env_line(key: str, value: str) -> str:
+              safe = value.replace("\\", "\\\\").replace('"', '\\"')
+              return f'Environment="{key}={safe}"\n'
+
+          unit = (
+              "[Unit]\nDescription=Taetigkeitsbericht Backend\nAfter=network.target\n"
+              "[Service]\nWorkingDirectory=/opt/taetigkeitsbericht/backend\n"
+              "ExecStart=/usr/local/bin/dotnet /opt/taetigkeitsbericht/backend/Taetigkeitsbericht.Backend.dll --urls=http://0.0.0.0:5108\n"
+              "Restart=always\n"
+              + env_line("ASPNETCORE_ENVIRONMENT", "Production")
+              + env_line("Jwt__Key", jwt)
+              + env_line("Database__UseDsql", "true")
+              + env_line("Database__Host", dsql)
+              + env_line("Database__User", "verwaltung")
+              + env_line("Database__Database", "postgres")
+              + env_line("Database__MigrateOnStartup", "true")
+              + env_line("AWS_REGION", region)
+              + env_line("AWS_DEFAULT_REGION", region)
+              + "[Install]\nWantedBy=multi-user.target\n"
+          )
+          cmds = [
+              "set -eux",
+              "dnf install -y tar gzip awscli postgresql15 || yum install -y tar gzip awscli postgresql15 || true",
+              "mkdir -p /opt/taetigkeitsbericht/backend /opt/taetigkeitsbericht/scripts",
+              f"aws s3 cp s3://{bucket}/backend.tar.gz /tmp/backend.tar.gz",
+              f"aws s3 cp s3://{bucket}/ec2-dsql-bootstrap.sh /opt/taetigkeitsbericht/scripts/ec2-dsql-bootstrap.sh",
+              "chmod +x /opt/taetigkeitsbericht/scripts/ec2-dsql-bootstrap.sh",
+              "tar -xzf /tmp/backend.tar.gz -C /opt/taetigkeitsbericht/backend",
+              f"export DSQL_ENDPOINT={json.dumps(dsql)}",
+              f"export EC2_ROLE_ARN={json.dumps(role)}",
+              f"export AWS_REGION={json.dumps(region)}",
+              "export AWS_DEFAULT_REGION=\"$AWS_REGION\"",
+              "/opt/taetigkeitsbericht/scripts/ec2-dsql-bootstrap.sh",
+              "curl -fsSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin --channel 10.0",
+              "ln -sfn \"$HOME/.dotnet/dotnet\" /usr/local/bin/dotnet || true",
+              "ln -sfn /root/.dotnet/dotnet /usr/local/bin/dotnet || true",
+              "cat > /etc/systemd/system/taetigkeitsbericht-backend.service <<'UNIT'\n"
+              + unit
+              + "UNIT\n",
+              "systemctl daemon-reload",
+              "systemctl enable taetigkeitsbericht-backend",
+              "systemctl restart taetigkeitsbericht-backend",
+              "sleep 15",
+              "systemctl is-active taetigkeitsbericht-backend",
+              "journalctl -u taetigkeitsbericht-backend -n 80 --no-pager || true",
+          ]
+          with open("/tmp/ssm-backend-commands.json", "w", encoding="utf-8") as f:
+              json.dump({"commands": cmds}, f)
+          print("SSM command payload written,", len(cmds), "commands")
+          PY
+
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "$INSTANCE_ID" \
             --document-name "AWS-RunShellScript" \
-            --comment "Deploy Backend" \
-            --parameters commands='[
-              "set -eux",
-              "dnf install -y tar gzip awscli || yum install -y tar gzip awscli",
-              "mkdir -p /opt/taetigkeitsbericht/backend",
-              "aws s3 cp s3://'"${BUCKET}"'/backend.tar.gz /tmp/backend.tar.gz",
-              "tar -xzf /tmp/backend.tar.gz -C /opt/taetigkeitsbericht/backend",
-              "cat > /etc/systemd/system/taetigkeitsbericht-backend.service <<EOF\n[Unit]\nDescription=Taetigkeitsbericht Backend\nAfter=network.target\n[Service]\nWorkingDirectory=/opt/taetigkeitsbericht/backend\nExecStart=/usr/bin/dotnet /opt/taetigkeitsbericht/backend/Taetigkeitsbericht.Backend.dll --urls=http://0.0.0.0:5108\nRestart=always\nEnvironment=ASPNETCORE_ENVIRONMENT=Production\nEnvironment=Jwt__Key='"${JWT_KEY}"'\nEnvironment=ConnectionStrings__DefaultConnection=Host='"${DSQL_ENDPOINT}"';Port=5432;Database=postgres;Username=verwaltung;SSL Mode=Require\n[Install]\nWantedBy=multi-user.target\nEOF",
-              "curl -fsSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin --channel 10.0",
-              "ln -sfn $HOME/.dotnet/dotnet /usr/local/bin/dotnet || true",
-              "systemctl daemon-reload",
-              "systemctl enable taetigkeitsbericht-backend",
-              "systemctl restart taetigkeitsbericht-backend"
-            ]' \
+            --comment "Deploy Backend + DSQL bootstrap" \
+            --parameters file:///tmp/ssm-backend-commands.json \
             --query "Command.CommandId" --output text)
+          echo "SSM CommandId=$COMMAND_ID"
           aws ssm wait command-executed --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" || true
+          STATUS=$(aws ssm get-command-invocation --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" \
+            --query "Status" --output text)
           aws ssm get-command-invocation --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" \
             --query "[Status,StandardOutputContent,StandardErrorContent]" --output text
+          if [ "$STATUS" != "Success" ]; then
+            echo "::error::Backend-SSM-Deploy fehlgeschlagen: $STATUS"
+            exit 1
+          fi
 
       - name: Deploy Frontend via SSM
         env:
@@ -298,6 +384,6 @@ jobs:
           echo "- Frontend: http://${{ needs.deploy-infra.outputs.frontend_public_ip }}/" >> "$GITHUB_STEP_SUMMARY"
           echo "- Backend:  http://${{ needs.deploy-infra.outputs.backend_public_ip }}:5108/graphql" >> "$GITHUB_STEP_SUMMARY"
           echo "- DSQL endpoint: ${DSQL_ENDPOINT}" >> "$GITHUB_STEP_SUMMARY"
-          echo "- EC2 Role (für AWS IAM GRANT verwaltung): ${EC2_ROLE_ARN:-${{ needs.deploy-infra.outputs.ec2_role_arn }}}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- EC2 Role (IAM GRANT verwaltung): ${EC2_ROLE_ARN:-${{ needs.deploy-infra.outputs.ec2_role_arn }}}" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "Hinweis: Aurora DSQL braucht IAM-Tokens statt festem Passwort \`verwaltung\`. Siehe infra/README.md." >> "$GITHUB_STEP_SUMMARY"
+          echo "Pipeline: DSQL-Rolle/GRANT via \`ec2-dsql-bootstrap.sh\` (idempotent), nur ausstehende EF-Migrationen (\`MigrateAsync\`) – **keine** DB-Löschung." >> "$GITHUB_STEP_SUMMARY"

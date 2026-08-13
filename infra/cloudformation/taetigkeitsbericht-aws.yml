@@ -222,10 +222,14 @@ Resources:
         - !Ref Ec2Role
 
   # --- Aurora DSQL ---
+  # Bestehender Cluster wird bei Stack-Updates beibehalten; Pipeline löscht keine Daten
+  # (nur idempotenter Bootstrap + EF-Migrationen). Schutz gegen versehentliches Löschen:
   DsqlCluster:
     Type: AWS::DSQL::Cluster
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
-      DeletionProtectionEnabled: false
+      DeletionProtectionEnabled: true
       Tags:
         - Key: Name
           Value: taetigkeitsbericht-fullstack-dsql

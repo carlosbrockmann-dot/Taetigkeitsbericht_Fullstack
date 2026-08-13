@@ -303,45 +303,24 @@ Beim **ersten** Lauf wird das Netzwerk erzeugt; bei weiteren Läufen meist nur a
 
 ---
 
-## Schritt 6 – Aurora DSQL einrichten
+## Schritt 6 – Aurora DSQL (automatisch in der Pipeline)
 
-### 6.1 Wichtige Einschränkung
+Die Pipeline erledigt nach dem Stack-Deploy auf der Backend-EC2:
 
-Aurora DSQL kennt **keine klassischen DB-Passwörter**.  
-Rolle `verwaltung` = PostgreSQL-Login-Rolle; „Passwort“ bei der Verbindung = **kurzlebiges IAM-Token**.
+1. **`ec2-dsql-bootstrap.sh`**: Admin-IAM-Token → `CREATE ROLE verwaltung` → `AWS IAM GRANT` auf die EC2-Rolle → Schema-Rechte (idempotent, **kein** DROP)  
+2. **Backend-Start** mit `Database__UseDsql=true` (Paket `Amazon.AuroraDsql.*`, Token-Refresh automatisch)  
+3. **`Database__MigrateOnStartup=true`**: nur **ausstehende** EF-Core-Migrationen (`MigrateAsync`) – **keine** Neuanlage/Löschung der Datenbank  
 
-Offizielle Docs: [Authentication tokens](https://docs.aws.amazon.com/aurora-dsql/latest/userguide/SECTION_authentication-token.html), [PrivateLink](https://docs.aws.amazon.com/aurora-dsql/latest/userguide/privatelink-managing-clusters.html).
+**Besteht der DSQL-Cluster bereits**, bleibt er erhalten (CloudFormation: `DeletionPolicy`/`UpdateReplacePolicy: Retain`, `DeletionProtectionEnabled: true`). Redeploys überschreiben keine Anwendungsdaten; Schema-Änderungen laufen nur über Migrationen.
 
-### 6.2 Rolle und IAM-Verknüpfung
+Manuelles SQL (nur Fallback): siehe `infra/scripts/post-dsql-setup.sql` / `ec2-dsql-bootstrap.sh`.
 
-Vorlage: `infra/scripts/post-dsql-setup.sql`
+### 6.1 Hinweise
 
-Einmalig (als DSQL-`admin` mit Token) ausführen:
-
-```sql
-CREATE ROLE verwaltung WITH LOGIN;
-
--- ACCOUNT_ID und Rollennamen aus den Stack-Outputs ersetzen:
-AWS IAM GRANT verwaltung TO 'arn:aws:iam::ACCOUNT_ID:role/taetigkeitsbericht-ec2-role';
-```
-
-`taetigkeitsbericht-ec2-role` entspricht dem Output **`Ec2RoleArn`** (nur der Rollenname bzw. volle ARN laut Doku).
-
-### 6.3 Datenbankname Taetigkeitsbericht
-
-- Wenn `CREATE DATABASE "Taetigkeitsbericht";` in DSQL möglich ist: ausführen und Connection darauf zeigen.
-- Sonst: Tabellen/Schema in der Standarddatenbank belassen und Connection-String anpassen.
-
-### 6.4 Schema / Migrationen
-
-Sobald das Backend die DB erreichen kann:
-
-- EF Core: `dotnet ef database update` (von einer Umgebung mit Netzpfad zur DB / Token), oder
-- Migrationsbefehl per SSM auf der Backend-EC2.
-
-### 6.5 Backend und Tokens
-
-Für Dauerbetrieb muss das Backend Tokens aus der **EC2-Instance-Role** erzeugen und als Connection-Password nutzen. Ein festes Passwort `verwaltung` im Connection-String reicht bei DSQL **nicht**.
+- DB-Name: Standard `postgres` (DSQL).  
+- Kein festes Passwort `verwaltung` im Connection-String.  
+- DSQL-DDL weicht von PostgreSQL ab; der EF-Adapter (`Amazon.AuroraDsql.EntityFrameworkCore`) passt Migrationen an.  
+- Docs: [Authentication tokens](https://docs.aws.amazon.com/aurora-dsql/latest/userguide/SECTION_authentication-token.html), [PrivateLink](https://docs.aws.amazon.com/aurora-dsql/latest/userguide/privatelink-managing-clusters.html).
 
 ---
 
@@ -431,8 +410,8 @@ Actions → Run workflow → Option **`force_instance_refresh`** = true.
 - [ ] Frontend `http://<FrontendPublicIp>/` lädt
 - [ ] Backend `http://<BackendPublicIp>:5108` erreichbar
 - [ ] DSQL + PrivateLink vorhanden
-- [ ] Rolle `verwaltung` + `AWS IAM GRANT` erledigt
-- [ ] Schema/Migrationen angewendet
+- [ ] Pipeline: DSQL-Bootstrap + Backend aktiv (Migrationen im Journal sichtbar)
+- [ ] Frontend erreichbar
 - [ ] `BACKEND_HOST_PUBLIC` gesetzt, zweiter Deploy für Frontend
 - [ ] CORS erlaubt Frontend-Origin
 - [ ] Desktop `authentication.toml` auf AWS-URLs
@@ -450,6 +429,7 @@ Actions → Run workflow → Option **`force_instance_refresh`** = true.
 | `InvalidClientTokenId` / `SignatureDoesNotMatch` | Falsche oder abgelaufene Keys; Secrets neu setzen; Key in IAM aktiv? |
 | Kein Access-Key-Button in der Konsole | Sandbox/Konto blockiert Keys – IAM-Rechte oder Konto-Typ prüfen |
 | Workflow nutzt noch `role-to-assume` / `AWS_ROLE_ARN` | Aktuellen Stand von `deploy-aws.yml` ziehen (Access Keys) |
+| CloudFormation deploy failed, Events in GitHub leer | In AWS-Konsole → CloudFormation → Stack `taetigkeitsbericht` → **Events**: Zeile mit `…_FAILED` und **Status reason** lesen. Häufig: Stack in `ROLLBACK_COMPLETE`/`UPDATE_ROLLBACK_FAILED` (Stack löschen und neu), IAM-Rolle `taetigkeitsbericht-ec2-role` existiert noch, DSQL/VPC-Endpoint-Fehler, fehlende Rechte |
 | CloudFormation IAM capability | Haken „acknowledge IAM resources“ setzen (falls manuell) |
 | SSM Instance not Online | 2–5 Min warten; Instance Profile prüfen; Instanz neu starten |
 | Frontend ohne Daten | `BACKEND_HOST_PUBLIC`, CORS, JWT/Token, Browser-Konsole/Netzwerk-Tab |
@@ -476,8 +456,7 @@ Actions → Run workflow → Option **`force_instance_refresh`** = true.
 3. GitHub Secrets setzen  
 4. Workflow auf `main` starten  
 5. IPs/Outputs notieren  
-6. DSQL-Rolle `verwaltung` + IAM GRANT  
-7. Migrationen  
-8. `BACKEND_HOST_PUBLIC` + zweiter Deploy  
+6. Pipeline: DSQL-Bootstrap + Migrationen (automatisch)  
+7. `BACKEND_HOST_PUBLIC` + zweiter Deploy  
 9. Desktop `authentication.toml` auf AWS zeigen  
 10. Abgeben / Online ansehen testen  

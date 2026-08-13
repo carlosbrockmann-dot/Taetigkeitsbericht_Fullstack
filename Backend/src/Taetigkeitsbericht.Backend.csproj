@@ -8,6 +8,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Amazon.AuroraDsql.EntityFrameworkCore" Version="1.0.0" />
+    <PackageReference Include="Amazon.AuroraDsql.Npgsql" Version="1.1.0" />
     <PackageReference Include="HotChocolate.AspNetCore" Version="16.6.0" />
     <PackageReference Include="HotChocolate.AspNetCore.Authorization" Version="16.6.0" />
     <PackageReference Include="MailKit" Version="4.17.0" />

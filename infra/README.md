@@ -34,17 +34,24 @@ Offizielle Hinweise zu PrivateLink: [Managing Aurora DSQL with PrivateLink](http
 
 ## Wichtig: Aurora DSQL und Passwörter
 
-**Aurora DSQL verwendet keine klassischen DB-Passwörter.** Authentifizierung läuft über **kurzlebige IAM-Tokens** ([Auth-Token](https://docs.aws.amazon.com/aurora-dsql/latest/userguide/SECTION_authentication-token.html), [Access control](https://aws.amazon.com/blogs/database/securing-amazon-aurora-dsql-access-control-best-practices/)).
+**Aurora DSQL verwendet keine klassischen DB-Passwörter.** Authentifizierung läuft über **kurzlebige IAM-Tokens**.
 
 | Wunsch | Realität bei Aurora DSQL |
 |--------|---------------------------|
-| Benutzer `verwaltung` | Möglich als **PostgreSQL-Rolle** `verwaltung` (`CREATE ROLE … WITH LOGIN`) |
-| Passwort `verwaltung` | **Nicht** als festes Passwort – Verbindung mit IAM-Token als „Passwort“ |
-| Datenbank `Taetigkeitsbericht` | Nach Cluster-Erstellung per SQL anlegen (soweit von DSQL unterstützt; sonst Schema/Tabellen in `postgres`) |
+| Benutzer `verwaltung` | PostgreSQL-Rolle `verwaltung` (`CREATE ROLE … WITH LOGIN`) |
+| Passwort `verwaltung` | **Nicht** – Verbindung mit IAM-Token |
+| Schema | EF-Core-Migrationen (`Database__MigrateOnStartup=true`) |
 
-Die Pipeline legt die Rolle `verwaltung` an und verknüpft sie mit der EC2-IAM-Rolle (`AWS IAM GRANT`). Das Backend muss Tokens erzeugen (`aws dsql generate-db-connect-auth-token` bzw. AWS SDK) und als Connection-Password nutzen – **nicht** den Klartext `verwaltung` in Git committen.
+### Was die Pipeline automatisch macht
 
-Wenn Sie zwingend Benutzername+Passwort im Connection-String brauchen, ist **Amazon Aurora PostgreSQL** (nicht DSQL) die passendere Variante. DSQL bleibt aber das in `Planung.md` festgelegte AWS-Ziel.
+1. CloudFormation: Cluster + PrivateLink  
+2. SSM auf Backend-EC2: `infra/scripts/ec2-dsql-bootstrap.sh` (Rolle + `AWS IAM GRANT`; **kein** DROP)
+3. Backend-Start mit `Amazon.AuroraDsql.*`: IAM-Token als User `verwaltung`, danach nur ausstehende EF-Migrationen (`MigrateAsync`) – **bestehende DB/Daten bleiben erhalten**
+4. CloudFormation: DSQL mit `DeletionProtectionEnabled` + `DeletionPolicy`/`UpdateReplacePolicy: Retain`
+
+Lokal bleibt `Database:UseDsql=false` und `ConnectionStrings:DefaultConnection` (PostgreSQL).
+
+Wenn Sie zwingend Benutzername+Passwort im Connection-String brauchen, ist **Amazon Aurora PostgreSQL** (nicht DSQL) die passendere Variante.
 
 ## Dateien
 
@@ -52,8 +59,8 @@ Wenn Sie zwingend Benutzername+Passwort im Connection-String brauchen, ist **Ama
 |------|--------|
 | `.github/workflows/deploy-aws.yml` | Pipeline bei Push auf `main` (Access Keys) |
 | `infra/cloudformation/taetigkeitsbericht-aws.yml` | VPC, SG, EC2, DSQL, PrivateLink-Endpoint |
-| `infra/scripts/remote-bootstrap.sh` | User-Data / SSM: Runtime auf EC2 |
-| `infra/scripts/post-dsql-setup.sql` | Rolle `verwaltung` + Hinweise DB-Name |
+| `infra/scripts/ec2-dsql-bootstrap.sh` | SSM: Rolle `verwaltung` + IAM GRANT (idempotent) |
+| `infra/scripts/post-dsql-setup.sql` | Kurz-Dokumentation der SQL-Schritte |
 
 ## GitHub Secrets (Repository secrets)
 
@@ -89,9 +96,8 @@ Sonst scheitert der Workflow mit `AccessDenied` (z. B. `cloudformation:Describ
 2. IAM-Deploy-Benutzer mit Rechten (Sandbox: `AdministratorAccess`) + Access Keys.
 3. **Repository secrets** in GitHub setzen.
 4. Optional EC2 Key Pair anlegen.
-5. Push auf `main` → Workflow läuft.
+5. Push auf `main` → Workflow: Infra, DSQL-Bootstrap, Backend (Migrationen beim Start), Frontend.
 6. Nach erstem erfolgreichen Stack: öffentliche Backend-URL in `BACKEND_HOST_PUBLIC` eintragen und erneut deployen (Frontend-Build).
-7. `dotnet ef database update` auf dem Backend (oder Migrations-Job), sobald DSQL erreichbar ist.
 
 ## Lokal Stack testen
 
