@@ -101,29 +101,12 @@ jobs:
               aws cloudformation describe-stacks --stack-name "${STACK_NAME}" \
                 --query "Stacks[0].[StackStatus,StackStatusReason]" --output text 2>/dev/null || echo "(kein Stack)"
               echo "=== FAILED-Events (ResourceStatusReason) ==="
-              aws cloudformation describe-stack-events --stack-name "${STACK_NAME}" --output json 2>/dev/null \
-                | python3 -c '
-import json,sys
-data=json.load(sys.stdin)
-events=data.get("StackEvents") or []
-failed=[e for e in events if "FAILED" in (e.get("ResourceStatus") or "")]
-if not failed:
-    print("(keine FAILED-Events – ggf. Change-Set-/Validierungsfehler oben in der aws-Ausgabe)")
-for e in failed[:15]:
-    print(e.get("Timestamp"), e.get("ResourceStatus"), e.get("LogicalResourceId"))
-    print("  Reason:", (e.get("ResourceStatusReason") or "").replace("\n"," "))
-'
-              echo "=== Letzte 12 Events ==="
-              aws cloudformation describe-stack-events --stack-name "${STACK_NAME}" --output json 2>/dev/null \
-                | python3 -c '
-import json,sys
-data=json.load(sys.stdin)
-for e in (data.get("StackEvents") or [])[:12]:
-    print(e.get("Timestamp"), e.get("ResourceStatus"), e.get("LogicalResourceId"))
-    reason=(e.get("ResourceStatusReason") or "")
-    if reason:
-        print("  ", reason[:300].replace("\n"," "))
-' || true
+              aws cloudformation describe-stack-events --stack-name "${STACK_NAME}" \
+                --output table 2>/dev/null | grep -E "FAILED|Timestamp|Logical" | head -n 40 \
+                || echo "(keine FAILED-Events / kein Stack)"
+              echo "=== Letzte Events (table) ==="
+              aws cloudformation describe-stack-events --stack-name "${STACK_NAME}" \
+                --max-items 12 --output table 2>/dev/null || true
             } | tee "$GITHUB_STEP_SUMMARY" >&2
             exit 1
           fi
